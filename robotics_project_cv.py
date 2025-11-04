@@ -1,15 +1,18 @@
 import cv2
 import numpy as np
+from sklearn.cluster import KMeans
 
 # --- PARAMETERS ---
 IMAGE_PATH = "keyboard_image.jpg"
 
-# QWERTY keyboard layout rows
-rows = [
-    "1234567890",
-    "QWERTYUIOP",
-    "ASDFGHJKL",
-    "ZXCVBNM"
+# Complete QWERTY keyboard layout including special keys
+rows_layout = [
+    ["Esc","F1","F2","F3","F4","F5","F6","F7","F8","F9","F10","F11","F12","PrtSc","Del"],
+    ["`","1","2","3","4","5","6","7","8","9","0","-","=","Backspace"],
+    ["Tab","Q","W","E","R","T","Y","U","I","O","P","[","]","\\ "],
+    ["CapsLock","A","S","D","F","G","H","J","K","L",";","'","Enter"],
+    ["Shift_L","Z","X","C","V","B","N","M",",",".","/","Shift_R"],
+    ["Ctrl_L","Win","Alt_L","Space","Alt_R","Win","Menu","Ctrl_R"]
 ]
 
 # --- READ IMAGE ---
@@ -18,14 +21,13 @@ if frame is None:
     raise ValueError("Cannot read image")
 frame = cv2.resize(frame, (1000, 400))
 
-# --- GRAYSCALE + ADAPTIVE THRESHOLD ---
+# --- PREPROCESSING ---
 gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 thresh = cv2.adaptiveThreshold(
     gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
     cv2.THRESH_BINARY_INV, 11, 3
 )
 
-# Morphology to close gaps and remove noise
 kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5,5))
 clean = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
 clean = cv2.morphologyEx(clean, cv2.MORPH_OPEN, kernel)
@@ -33,66 +35,55 @@ clean = cv2.morphologyEx(clean, cv2.MORPH_OPEN, kernel)
 # --- FIND CONTOURS ---
 contours, _ = cv2.findContours(clean, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
+# Detect key boxes
 key_boxes = []
 for cnt in contours:
-    approx = cv2.approxPolyDP(cnt, 0.02*cv2.arcLength(cnt, True), True)
-    x, y, w, h = cv2.boundingRect(approx)
+    x, y, w, h = cv2.boundingRect(cnt)
+    if 10 < w < 150 and 10 < h < 150:  # relaxed filter
+        key_boxes.append((x, y, w, h))
 
-    # Relaxed filter for key-like rectangles
-    if 15 < w < 120 and 15 < h < 120:
-        aspect_ratio = w/h
-        if 0.5 < aspect_ratio < 2.0:
-            cx, cy = x + w//2, y + h//2
-            key_boxes.append((cx, cy, x, y, w, h))
+if not key_boxes:
+    raise ValueError("No keys detected! Check your image and lighting.")
 
-# --- SORT KEYS ROW-WISE ---
-# Step 1: Sort top-to-bottom
-key_boxes.sort(key=lambda k: k[1])
+# --- CLUSTER BY Y-COORDINATE TO FIND ROWS ---
+y_centers = np.array([y + h//2 for x, y, w, h in key_boxes]).reshape(-1,1)
+num_rows = len(rows_layout)
+kmeans = KMeans(n_clusters=num_rows, random_state=0).fit(y_centers)
+labels = kmeans.labels_
 
-# Step 2: Group into rows
-rows_detected = []
-current_row = []
-row_threshold = 20  # max y-difference to consider same row
-
+rows_detected = [[] for _ in range(num_rows)]
 for i, box in enumerate(key_boxes):
-    if not current_row:
-        current_row.append(box)
-        continue
-    _, cy, _, _, _, _ = box
-    _, prev_cy, _, _, _, _ = current_row[-1]
-    if abs(cy - prev_cy) <= row_threshold:
-        current_row.append(box)
-    else:
-        rows_detected.append(current_row)
-        current_row = [box]
-if current_row:
-    rows_detected.append(current_row)
+    row_idx = labels[i]
+    rows_detected[row_idx].append(box)
 
-# Step 3: Sort each row left-to-right
+# Sort rows top-to-bottom based on average y-center
+rows_detected.sort(key=lambda r: np.mean([y + h//2 for x, y, w, h in r]))
+
+# --- SORT EACH ROW LEFT-TO-RIGHT ---
 for row in rows_detected:
-    row.sort(key=lambda k: k[0])
+    row.sort(key=lambda b: b[0])  # sort by x-coordinate
 
-# --- ASSIGN QWERTY LABELS ---
+# --- ASSIGN LABELS ACCORDING TO FULL LAYOUT ---
 key_map = {}
 for row_idx, row in enumerate(rows_detected):
-    if row_idx >= len(rows):
-        break
-    labels = rows[row_idx]
+    if row_idx >= len(rows_layout):
+        continue
+    layout_row = rows_layout[row_idx]
     for col_idx, box in enumerate(row):
-        if col_idx >= len(labels):
+        if col_idx >= len(layout_row):
             break
-        label = labels[col_idx]
-        cx, cy, x, y, w, h = box
-        key_map[label] = (cx, cy)
+        x, y, w, h = box
+        cx, cy = x + w//2, y + h//2
+        key_map[layout_row[col_idx]] = (cx, cy)
 
-        # Draw on frame
-        cv2.rectangle(frame, (x,y), (x+w, y+h), (0,255,0), 2)
-        cv2.putText(frame, label, (x+5, y+h//2),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255,0,0), 1)
+        # Draw for visualization
+        cv2.rectangle(frame, (x, y), (x+w, y+h), (0,255,0), 2)
+        cv2.putText(frame, layout_row[col_idx], (x+5, y+h//2),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,0,0), 1)
         cv2.circle(frame, (cx, cy), 3, (0,0,255), -1)
 
 # --- OUTPUT ---
-print("Detected keys and their centers:")
+print("Detected keys and centers:")
 for k, v in key_map.items():
     print(f"{k}: {v}")
 

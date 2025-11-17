@@ -12,6 +12,7 @@ from google.colab.patches import cv2_imshow
 # --- CONFIGURATION ---
 VALID_KEY_CHARS = list("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789`~!@#$%^&*()-_=+[]{}\\|;:'\",.<>/?")
 VALID_KEYS = set(VALID_KEY_CHARS)
+DIGITS = set("0123456789")
 
 # --- IMAGE HANDLING ---
 def load_and_resize(path, max_w=1280):
@@ -27,10 +28,8 @@ def load_and_resize(path, max_w=1280):
 # --- PREPROCESSING: build adaptive mask and edge mask, then union ---
 def build_masks(img, block_size=21, C=5):
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    # Light smoothing to reduce noise but keep edges
     gray_blur = cv2.GaussianBlur(gray, (5, 5), 0)
 
-    # Adaptive threshold (invert so dark regions are white)
     bs = block_size if block_size % 2 == 1 else block_size + 1
     mask_adaptive = cv2.adaptiveThreshold(
         gray_blur, 255,
@@ -38,18 +37,15 @@ def build_masks(img, block_size=21, C=5):
         bs, C
     )
 
-    # Small morphology to avoid merging neighboring keys
     kernel_small = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
     mask_adaptive = cv2.morphologyEx(mask_adaptive, cv2.MORPH_CLOSE, kernel_small, iterations=1)
     mask_adaptive = cv2.erode(mask_adaptive, kernel_small, iterations=1)
 
-    # Edge-based mask
     gray_bi = cv2.bilateralFilter(gray, 9, 75, 75)
     edges = cv2.Canny(gray_bi, 40, 160)
     edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel_small, iterations=1)
     mask_edges = cv2.dilate(edges, kernel_small, iterations=1)
 
-    # Union of both masks
     mask_union = cv2.bitwise_or(mask_adaptive, mask_edges)
 
     return gray, mask_adaptive, mask_edges, mask_union
@@ -58,11 +54,9 @@ def build_masks(img, block_size=21, C=5):
 def find_key_contours(binary_mask, img_shape):
     contours, hierarchy = cv2.findContours(binary_mask.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
     H, W = img_shape[:2]
-
-    # Scale-aware thresholds
     image_area = float(W * H)
-    min_area = image_area * 0.00001   # permissive
-    max_area = image_area * 0.08      # allow larger keys/spacebar
+    min_area = image_area * 0.00001
+    max_area = image_area * 0.08
 
     candidates = []
     for cnt in contours:
@@ -75,29 +69,23 @@ def find_key_contours(binary_mask, img_shape):
         aspect = w / float(h)
         if not (0.35 < aspect < 9.0):
             continue
-
         rect_area = w * h
         if rect_area <= 0:
             continue
         fill_ratio = area / float(rect_area)
         if fill_ratio < 0.20:
             continue
-
-        # Prefer near-rectangular contours
         approx = cv2.approxPolyDP(cnt, 0.03 * cv2.arcLength(cnt, True), True)
         if len(approx) < 4 or len(approx) > 14:
             continue
-
         candidates.append(cnt)
 
-    # Sort by row (y) then column (x)
     candidates = sorted(candidates, key=lambda c: (cv2.boundingRect(c)[1], cv2.boundingRect(c)[0]))
     return candidates
 
 # --- OCR HELPERS ---
 def _run_tesseract(pil_img, whitelist):
     whitelist_token = shlex.quote(whitelist)
-    # Try multiple PSMs
     for psm in (10, 8, 6, 7, 13):
         config = f'--oem 1 --psm {psm} -c tessedit_char_whitelist={whitelist_token}'
         text = pytesseract.image_to_string(pil_img, config=config).strip().replace("\n", "")
@@ -107,7 +95,6 @@ def _run_tesseract(pil_img, whitelist):
 
 def ocr_label_from_roi(gray, bbox, valid_keys=VALID_KEYS):
     x, y, w, h = bbox
-    # Crop inner region; too large margin can remove the legend
     margin = int(0.10 * min(w, h))
     rx1 = max(0, x + margin)
     ry1 = max(0, y + margin)
@@ -117,10 +104,7 @@ def ocr_label_from_roi(gray, bbox, valid_keys=VALID_KEYS):
     if roi.size == 0 or roi.shape[0] < 6 or roi.shape[1] < 6:
         return None
 
-    # Upscale for OCR
     roi_big = cv2.resize(roi, None, fx=3.0, fy=3.0, interpolation=cv2.INTER_CUBIC)
-
-    # Try both binarizations
     roi_bin = cv2.threshold(roi_big, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
     roi_inv = cv2.bitwise_not(roi_bin)
 
@@ -135,15 +119,14 @@ def ocr_label_from_roi(gray, bbox, valid_keys=VALID_KEYS):
     if not text:
         return None
 
-    # Normalize confusions and casing
     if len(text) == 1 and text.isalpha():
         text = text.upper()
-    mapping = {'|': 'I', 'l': 'I', '0': 'O'}
+    mapping = {'|': 'I', 'l': 'I'}  # no '0'->'O' mapping
     text = mapping.get(text, text)
 
     return text if text in valid_keys else None
 
-# --- DUPLICATE FILTERING ---
+# --- GEOMETRY HELPERS ---
 def iou_box(a, b):
     ax, ay, aw, ah = a
     bx, by, bw, bh = b
@@ -155,19 +138,52 @@ def iou_box(a, b):
     denom = (aw * ah) + (bw * bh) - inter
     return inter / denom if denom > 0 else 0.0
 
-def is_duplicate(new_bbox, detected_bboxes, iou_thresh=0.2, center_thresh=18):
-    nx, ny, nw, nh = new_bbox
-    ncx, ncy = nx + nw / 2.0, ny + nh / 2.0
-    for (ox, oy, ow, oh) in detected_bboxes:
-        if iou_box(new_bbox, (ox, oy, ow, oh)) > iou_thresh:
-            return True
-        ocx, ocy = ox + ow / 2.0, oy + oh / 2.0
-        if math.hypot(ncx - ocx, ncy - ocy) < center_thresh:
-            return True
-    return False
+def nms_boxes(boxes, iou_thresh=0.35):
+    if not boxes:
+        return []
+    areas = [(w * h) for (_, _, w, h) in boxes]
+    idxs = list(range(len(boxes)))
+    idxs.sort(key=lambda i: areas[i], reverse=True)
+    kept = []
+    while idxs:
+        i = idxs.pop(0)
+        keep = True
+        for k in kept:
+            if iou_box(boxes[i], boxes[k]) > iou_thresh:
+                keep = False
+                break
+        if keep:
+            kept.append(i)
+        idxs = [j for j in idxs if iou_box(boxes[j], boxes[i]) <= iou_thresh]
+    return [boxes[i] for i in kept]
 
-def is_unique_label(label, detected_labels):
-    return True  # allow duplicates; rely on geometry
+def remove_nested_boxes(boxes, pad=2, area_ratio_thresh=0.85):
+    if not boxes:
+        return []
+    areas = [w * h for (x, y, w, h) in boxes]
+    idxs = list(range(len(boxes)))
+    idxs.sort(key=lambda i: areas[i], reverse=True)
+
+    def contains(outer, inner):
+        ox, oy, ow, oh = outer
+        ix, iy, iw, ih = inner
+        return (ix >= ox + pad and iy >= oy + pad and
+                ix + iw <= ox + ow - pad and iy + ih <= oy + oh - pad)
+
+    keep = [True] * len(boxes)
+    for i_pos, i in enumerate(idxs):
+        if not keep[i]:
+            continue
+        oi = boxes[i]
+        ai = areas[i]
+        for j in idxs[i_pos + 1:]:
+            if not keep[j]:
+                continue
+            oj = boxes[j]
+            aj = areas[j]
+            if contains(oi, oj) and (aj / ai) <= area_ratio_thresh:
+                keep[j] = False
+    return [boxes[k] for k in range(len(boxes)) if keep[k]]
 
 # --- ROW CLUSTERING ---
 def cluster_rows_by_y(centers, height_est):
@@ -188,45 +204,65 @@ def cluster_rows_by_y(centers, height_est):
     clusters.append(current)
     return clusters
 
-# --- QWERTY CORRECTION (safe overlap + correct indexing) ---
+# --- BUILD DETECTED ROWS ---
+def build_detected_rows(results):
+    idxs = [i for i, r in enumerate(results) if r.get("bbox")]
+    if not idxs:
+        return [], {}, []
+    heights = [results[i]["bbox"]["h"] for i in idxs]
+    typical_h = statistics.median(heights) if heights else 50
+    centers = [(results[i]["center"]["cx"], results[i]["center"]["cy"]) for i in idxs]
+    row_positions = cluster_rows_by_y(centers, typical_h)
+    rows = []
+    for pos_cluster in row_positions:
+        row_indices = [idxs[p] for p in pos_cluster]
+        row_sorted = sorted(row_indices, key=lambda ridx: results[ridx]["center"]["cx"])
+        rows.append(row_sorted)
+    index_to_row_info = {}
+    for ridx_row, row in enumerate(rows):
+        for cpos, res_idx in enumerate(row):
+            index_to_row_info[res_idx] = (ridx_row, cpos)
+    return rows, index_to_row_info, row_positions
+
+# --- MAP DETECTED ROWS TO QWERTY LAYOUT ROWS ---
+def map_rows_to_layout(results, qwerty_layout):
+    rows, _, _ = build_detected_rows(results)
+    if not rows:
+        return {}
+    det_row_labels = [set(results[i]["label"] for i in row if results[i]["label"] and results[i]["label"] != "?") for row in rows]
+    layout_row_sets = [set(row) for row in qwerty_layout]
+    scores = [[len(det_row_labels[dr] & layout_row_sets[lr]) for lr in range(len(qwerty_layout))] for dr in range(len(rows))]
+    row_map = {}
+    used_layout = set()
+    for dr in range(len(rows)):
+        lr_best = max(range(len(qwerty_layout)), key=lambda lr: (scores[dr][lr], lr not in used_layout))
+        row_map[dr] = lr_best
+        used_layout.add(lr_best)
+    return row_map
+
+# --- QWERTY CORRECTION ---
 def correct_labels_by_qwerty(results, qwerty_layout, min_row_len=5, match_thresh=0.6):
-    # Work only with entries that have bboxes (skip inferred space etc.)
     idxs = [i for i, r in enumerate(results) if r.get("bbox")]
     if not idxs:
         return results
-
     heights = [results[i]["bbox"]["h"] for i in idxs]
     typical_h = statistics.median(heights) if heights else 50
-
     centers_coords = [(results[i]["center"]["cx"], results[i]["center"]["cy"]) for i in idxs]
     row_positions = cluster_rows_by_y(centers_coords, typical_h)
-
     for pos_cluster in row_positions:
-        row_indices = [idxs[p] for p in pos_cluster]  # map back to original results indices
+        row_indices = [idxs[p] for p in pos_cluster]
         row_keys = [results[i] for i in row_indices]
-        # Sort row_keys by x and keep mapping back to indices
         row_pairs = sorted(list(zip(row_indices, row_keys)), key=lambda rk: rk[1]["center"]["cx"])
         row_indices_sorted = [p[0] for p in row_pairs]
         row_keys_sorted = [p[1] for p in row_pairs]
         labels = [r["label"] for r in row_keys_sorted]
-
         if len(labels) < min_row_len:
             continue
-
-        best = {
-            "score": -1.0,
-            "layout": None,
-            "offset": None,
-            "overlap_start_det": None,
-            "overlap_start_lay": None,
-            "overlap_len": 0
-        }
-
+        best = {"score": -1.0, "layout": None, "offset": None, "overlap_start_det": None, "overlap_start_lay": None, "overlap_len": 0}
         for layout_row in qwerty_layout:
             Ld = len(labels)
             Ll = len(layout_row)
-            # offset = lay_start - det_start; allow negative offsets
-            for offset in range(-Ld + 1, Ll):  # safe range
+            for offset in range(-Ld + 1, Ll):
                 start_det = max(0, -offset)
                 start_lay = max(0, offset)
                 overlap = min(Ld - start_det, Ll - start_lay)
@@ -236,30 +272,188 @@ def correct_labels_by_qwerty(results, qwerty_layout, min_row_len=5, match_thresh
                 for i in range(overlap):
                     if labels[start_det + i] == layout_row[start_lay + i]:
                         match_count += 1
-                # score by ratio over overlap
                 match_ratio = match_count / float(overlap)
                 if match_ratio > best["score"] or (math.isclose(match_ratio, best["score"]) and overlap > best["overlap_len"]):
-                    best.update(
-                        score=match_ratio,
-                        layout=layout_row,
-                        offset=offset,
-                        overlap_start_det=start_det,
-                        overlap_start_lay=start_lay,
-                        overlap_len=overlap
-                    )
-
-        # Apply correction only if confident and overlap is sufficiently long
+                    best.update(score=match_ratio, layout=layout_row, offset=offset,
+                                overlap_start_det=start_det, overlap_start_lay=start_lay, overlap_len=overlap)
         if best["layout"] is not None and best["score"] >= match_thresh and best["overlap_len"] >= min_row_len:
             for i in range(best["overlap_len"]):
                 det_idx_in_row = best["overlap_start_det"] + i
                 lay_idx = best["overlap_start_lay"] + i
-                correct_label = best["layout"][lay_idx]
-                row_keys_sorted[det_idx_in_row]["label"] = correct_label
-
-            # Write back to original results using sorted indices mapping
+                row_keys_sorted[det_idx_in_row]["label"] = best["layout"][lay_idx]
             for i, res_idx in enumerate(row_indices_sorted):
                 results[res_idx] = row_keys_sorted[i]
+    return results
 
+# --- ROW-AWARE AMBIGUITY FIX (convert number-row 'O' to '0') ---
+def fix_ambiguous_by_row(results):
+    rows, _, _ = build_detected_rows(results)
+    if not rows:
+        return results
+    if len(rows) >= 2:
+        number_row = rows[1]
+    else:
+        number_row = rows[0]
+    for res_idx in number_row:
+        lbl = results[res_idx]["label"]
+        if lbl == 'O':
+            results[res_idx]["label"] = '0'
+    return results
+
+# --- DUPLICATE LABEL RESOLUTION (demote losers to '?', prefer expected row; for digits, prefer top-most) ---
+def resolve_duplicate_labels(results, qwerty_layout):
+    label_pos = {lbl: (ri, ci) for ri, row in enumerate(qwerty_layout) for ci, lbl in enumerate(row)}
+    idxs = [i for i, r in enumerate(results) if r.get("bbox") and r.get("label") and r["label"] != "?"]
+    if not idxs:
+        return results
+
+    rows, index_to_row_info, _ = build_detected_rows(results)
+    row_map = map_rows_to_layout(results, qwerty_layout)
+
+    widths = [results[i]["bbox"]["w"] for i in idxs]
+    typical_w = statistics.median(widths) if widths else 30
+
+    def expected_neighbors(lbl):
+        if lbl not in label_pos:
+            return {}
+        r, c = label_pos[lbl]
+        exp = {}
+        row = qwerty_layout[r]
+        if c - 1 >= 0:
+            exp["left"] = row[c - 1]
+        if c + 1 < len(row):
+            exp["right"] = row[c + 1]
+        if r - 1 >= 0 and c < len(qwerty_layout[r - 1]):
+            exp["above"] = qwerty_layout[r - 1][c]
+        if r + 1 < len(qwerty_layout) and c < len(qwerty_layout[r + 1]):
+            exp["below"] = qwerty_layout[r + 1][c]
+        return exp
+
+    def neighbor_score(res_idx, lbl):
+        score = 0
+        exp = expected_neighbors(lbl)
+        row_id, col_pos = index_to_row_info.get(res_idx, (None, None))
+        if row_id is None:
+            return score
+        row = rows[row_id]
+        if col_pos - 1 >= 0 and exp.get("left"):
+            left_idx = row[col_pos - 1]
+            if results[left_idx]["label"] == exp["left"]:
+                score += 1
+        if col_pos + 1 < len(row) and exp.get("right"):
+            right_idx = row[col_pos + 1]
+            if results[right_idx]["label"] == exp["right"]:
+                score += 1
+        cx = results[res_idx]["center"]["cx"]
+        x_thresh = typical_w * 1.6
+        if exp.get("above") and row_id - 1 >= 0:
+            above_row = rows[row_id - 1]
+            if above_row:
+                nearest = min(above_row, key=lambda j: abs(results[j]["center"]["cx"] - cx))
+                if abs(results[nearest]["center"]["cx"] - cx) <= x_thresh and results[nearest]["label"] == exp["above"]:
+                    score += 1
+        if exp.get("below") and row_id + 1 < len(rows):
+            below_row = rows[row_id + 1]
+            if below_row:
+                nearest = min(below_row, key=lambda j: abs(results[j]["center"]["cx"] - cx))
+                if abs(results[nearest]["center"]["cx"] - cx) <= x_thresh and results[nearest]["label"] == exp["below"]:
+                    score += 1
+        return score
+
+    # Group by label
+    label_groups = {}
+    for i in idxs:
+        lbl = results[i]["label"]
+        label_groups.setdefault(lbl, []).append(i)
+
+    for lbl, inds in label_groups.items():
+        if len(inds) <= 1:
+            continue
+
+        exp_layout_row = label_pos.get(lbl, (None, None))[0]
+        in_expected_rows = []
+        out_rows = []
+        for j in inds:
+            det_row = index_to_row_info.get(j, (None, None))[0]
+            mapped = row_map.get(det_row, None)
+            if mapped == exp_layout_row:
+                in_expected_rows.append(j)
+            else:
+                out_rows.append(j)
+        candidates = in_expected_rows if in_expected_rows else inds
+
+        # Score and sort candidates; for digits, prefer top-most (smaller y)
+        scored = []
+        for j in candidates:
+            s = neighbor_score(j, lbl)
+            area = results[j]["bbox"]["w"] * results[j]["bbox"]["h"]
+            cy = results[j]["center"]["cy"]
+            scored.append((s, area, cy, j))
+
+        if lbl in DIGITS:
+            # sort by neighbor score, then smaller y (top row), then area
+            scored.sort(key=lambda t: (t[0], -t[2], t[1]), reverse=True)
+        else:
+            scored.sort(key=lambda t: (t[0], t[1]), reverse=True)
+
+        keep_id = scored[0][3]
+
+        # Demote other candidates to '?' (keep boxes for gap filling)
+        for _, _, _, j in scored[1:]:
+            if j != keep_id:
+                results[j]["inferred"] = True
+                results[j]["label"] = "?"
+        for j in out_rows:
+            if j != keep_id:
+                results[j]["inferred"] = True
+                results[j]["label"] = "?"
+
+    return results
+
+# --- FILL MISSING KEYS BY LAYOUT GAPS (assign between left/right if present) ---
+def fill_missing_by_layout(results, qwerty_layout):
+    rows, index_to_row_info, _ = build_detected_rows(results)
+    if not rows:
+        return results
+    row_map = map_rows_to_layout(results, qwerty_layout)
+
+    label_to_indices = {}
+    for i, r in enumerate(results):
+        if r.get("bbox") and r.get("label"):
+            label_to_indices.setdefault(r["label"], []).append(i)
+
+    def assign_between(det_row_id, left_label, right_label, target_label):
+        row = rows[det_row_id]
+        left_idx = next((i for i in row if results[i]["label"] == left_label), None)
+        right_idx = next((i for i in row if results[i]["label"] == right_label), None)
+        if left_idx is None or right_idx is None:
+            return False
+        cx_left = results[left_idx]["center"]["cx"]
+        cx_right = results[right_idx]["center"]["cx"]
+        if cx_left >= cx_right:
+            return False
+        between = [i for i in row if results[i]["label"] == "?" and cx_left < results[i]["center"]["cx"] < cx_right]
+        if not between:
+            return False
+        mid = (cx_left + cx_right) / 2.0
+        chosen = min(between, key=lambda i: abs(results[i]["center"]["cx"] - mid))
+        results[chosen]["label"] = target_label
+        results[chosen]["inferred"] = True
+        label_to_indices.setdefault(target_label, []).append(chosen)
+        return True
+
+    for det_row_id, row in enumerate(rows):
+        layout_row_id = row_map.get(det_row_id, None)
+        if layout_row_id is None:
+            continue
+        layout_row = qwerty_layout[layout_row_id]
+        for ci, lbl in enumerate(layout_row):
+            if lbl in label_to_indices:
+                continue
+            left_lbl = layout_row[ci - 1] if ci - 1 >= 0 else None
+            right_lbl = layout_row[ci + 1] if ci + 1 < len(layout_row) else None
+            if left_lbl and right_lbl:
+                assign_between(det_row_id, left_lbl, right_lbl, lbl)
     return results
 
 # --- SPACEBAR HEURISTICS ---
@@ -282,37 +476,32 @@ def get_space_center(results, offset_factor=1.25):
 def detect_spacebar(results):
     if not results:
         return None
-    widths = [r["bbox"]["w"] for r in results if r.get("bbox")]
-    heights = [r["bbox"]["h"] for r in results if r.get("bbox")]
+    boxes = [r for r in results if r.get("bbox")]
+    widths = [r["bbox"]["w"] for r in boxes]
+    heights = [r["bbox"]["h"] for r in boxes]
     if not widths or not heights:
         sc = get_space_center(results)
         if sc:
             return {"label": "SPACE", "bbox": None, "center": sc, "inferred": True}
         return None
-
     typical_h = statistics.median(heights)
-    centers = [(r["center"]["cx"], r["center"]["cy"]) for r in results if r.get("bbox")]
+    centers = [(r["center"]["cx"], r["center"]["cy"]) for r in boxes]
     row_indices = cluster_rows_by_y(centers, typical_h)
     if not row_indices:
         sc = get_space_center(results)
         if sc:
             return {"label": "SPACE", "bbox": None, "center": sc, "inferred": True}
         return None
-
-    bottom_cluster = row_indices[-1]
-    bottom_row = [results[i] for i in [j for j in range(len(results)) if results[j].get("bbox")]][:len(centers)]
-    # Rebuild bottom row properly from indices mapping
     filtered_idxs = [i for i, r in enumerate(results) if r.get("bbox")]
+    bottom_cluster = row_indices[-1]
     bottom_row = [results[filtered_idxs[k]] for k in bottom_cluster]
     bottom_row.sort(key=lambda r: r["center"]["cx"])
     med_w = statistics.median(widths)
-
     candidates = [r for r in bottom_row if r["bbox"]["w"] > 3.5 * med_w]
     if candidates:
         space = max(candidates, key=lambda rr: rr["bbox"]["w"])
         space["label"] = "SPACE"
         return space
-
     sc = get_space_center(results)
     if sc:
         return {"label": "SPACE", "bbox": None, "center": sc, "inferred": True}
@@ -321,11 +510,9 @@ def detect_spacebar(results):
 # --- MAIN DETECTION PIPELINE ---
 def detect_keyboard_keys(image_path, verbose=False, save_debug=True, include_unlabeled=True):
     img = load_and_resize(image_path)
-
     gray, mask_adaptive, mask_edges, mask_union = build_masks(img, block_size=21, C=5)
     contours = find_key_contours(mask_union, img.shape)
 
-    # If still too few, try slightly different params
     if len(contours) < 10:
         if verbose:
             print(f"Union mask yielded {len(contours)} contours; trying alternate params...")
@@ -340,59 +527,53 @@ def detect_keyboard_keys(image_path, verbose=False, save_debug=True, include_unl
         cv2.imwrite("debug_mask_edges.png", mask_edges)
         cv2.imwrite("debug_mask_union.png", mask_union)
 
-    annotated = img.copy()
-    results = []
-    detected_bboxes = []
-
+    contour_boxes = []
     for cnt in contours:
         x, y, w, h = cv2.boundingRect(cnt)
-        if w < 12 or h < 12:
-            continue
+        if w >= 12 and h >= 12:
+            contour_boxes.append((x, y, w, h))
 
-        if is_duplicate((x, y, w, h), detected_bboxes):
-            continue
-        detected_bboxes.append((x, y, w, h))
+    all_boxes = nms_boxes(contour_boxes, iou_thresh=0.3)
+    all_boxes = remove_nested_boxes(all_boxes, pad=2, area_ratio_thresh=0.85)
 
+    raw_results = []
+    for (x, y, w, h) in all_boxes:
         label = ocr_label_from_roi(gray, (x, y, w, h), VALID_KEYS)
         cx, cy = int(x + w / 2), int(y + h / 2)
-
-        if label:
-            res_item = {
-                "label": label,
-                "bbox": {"x": x, "y": y, "w": w, "h": h},
-                "center": {"cx": cx, "cy": cy},
-                "inferred": False
-            }
-            cv2.putText(annotated, label, (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 255), 1)
-        else:
-            if not include_unlabeled:
-                continue
-            res_item = {
-                "label": "?",
-                "bbox": {"x": x, "y": y, "w": w, "h": h},
-                "center": {"cx": cx, "cy": cy},
-                "inferred": True
-            }
-            cv2.putText(annotated, "?", (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 165, 255), 1)
-
-        results.append(res_item)
-        cv2.rectangle(annotated, (x, y), (x + w, y + h), (0, 255, 0), 2)
-
+        raw_results.append({
+            "label": label if label else "?",
+            "bbox": {"x": x, "y": y, "w": w, "h": h},
+            "center": {"cx": cx, "cy": cy},
+            "inferred": False if label else True
+        })
         if verbose:
-            print(f"Box @ ({x},{y},{w},{h}) -> {res_item['label']}")
+            print(f"Box @ ({x},{y},{w},{h}) -> {label if label else '?'}")
 
-    # QWERTY correction only if we have some labeled keys
-    if any(r["label"] != "?" for r in results):
-        qwerty_layout = [
-            ['`', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '='],
-            ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'],
-            ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'],
-            ['Z', 'X', 'C', 'V', 'B', 'N', 'M']
-        ]
-        results = correct_labels_by_qwerty(results, qwerty_layout, min_row_len=5, match_thresh=0.6)
+    qwerty_layout = [
+        ['`', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '='],
+        ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'],
+        ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'],
+        ['Z', 'X', 'C', 'V', 'B', 'N', 'M']
+    ]
 
-    # Spacebar detection (uses bbox-based entries)
-    space = detect_spacebar(results)
+    if any(r["label"] != "?" for r in raw_results):
+        raw_results = correct_labels_by_qwerty(raw_results, qwerty_layout, min_row_len=5, match_thresh=0.6)
+
+    raw_results = fix_ambiguous_by_row(raw_results)
+    dedup_results = resolve_duplicate_labels(raw_results, qwerty_layout)
+    final_results = fill_missing_by_layout(dedup_results, qwerty_layout)
+
+    annotated = img.copy()
+    for r in final_results:
+        if not r.get("bbox"):
+            continue
+        x, y, w, h = r["bbox"]["x"], r["bbox"]["y"], r["bbox"]["w"], r["bbox"]["h"]
+        lbl = r["label"]
+        cv2.rectangle(annotated, (x, y), (x + w, y + h), (0, 255, 0), 2)
+        cv2.putText(annotated, lbl, (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.55,
+                    (0, 0, 255) if lbl != "?" else (0, 165, 255), 1)
+
+    space = detect_spacebar(final_results)
     if space:
         if space.get("bbox"):
             bx, by, bw, bh = space["bbox"]["x"], space["bbox"]["y"], space["bbox"]["w"], space["bbox"]["h"]
@@ -401,11 +582,11 @@ def detect_keyboard_keys(image_path, verbose=False, save_debug=True, include_unl
         cx, cy = space["center"]["cx"], space["center"]["cy"]
         cv2.circle(annotated, (cx, cy), 5, (255, 0, 0), -1)
         if space.get("bbox") is None:
-            results.append(space)
+            final_results.append(space)
         if verbose:
             print(f"Space key: {space}")
 
-    return annotated, results
+    return annotated, final_results
 
 # --- MAIN ENTRY POINT ---
 def main():

@@ -121,7 +121,7 @@ def ocr_label_from_roi(gray, bbox, valid_keys=VALID_KEYS):
 
     if len(text) == 1 and text.isalpha():
         text = text.upper()
-    mapping = {'|': 'I', 'l': 'I'}  # no '0'->'O' mapping
+    mapping = {'|': 'I', 'l': 'I'}  # do not map '0' to 'O'
     text = mapping.get(text, text)
 
     return text if text in valid_keys else None
@@ -360,7 +360,6 @@ def resolve_duplicate_labels(results, qwerty_layout):
                     score += 1
         return score
 
-    # Group by label
     label_groups = {}
     for i in idxs:
         lbl = results[i]["label"]
@@ -382,7 +381,6 @@ def resolve_duplicate_labels(results, qwerty_layout):
                 out_rows.append(j)
         candidates = in_expected_rows if in_expected_rows else inds
 
-        # Score and sort candidates; for digits, prefer top-most (smaller y)
         scored = []
         for j in candidates:
             s = neighbor_score(j, lbl)
@@ -391,14 +389,12 @@ def resolve_duplicate_labels(results, qwerty_layout):
             scored.append((s, area, cy, j))
 
         if lbl in DIGITS:
-            # sort by neighbor score, then smaller y (top row), then area
             scored.sort(key=lambda t: (t[0], -t[2], t[1]), reverse=True)
         else:
             scored.sort(key=lambda t: (t[0], t[1]), reverse=True)
 
         keep_id = scored[0][3]
 
-        # Demote other candidates to '?' (keep boxes for gap filling)
         for _, _, _, j in scored[1:]:
             if j != keep_id:
                 results[j]["inferred"] = True
@@ -410,58 +406,145 @@ def resolve_duplicate_labels(results, qwerty_layout):
 
     return results
 
-# --- FILL MISSING KEYS BY LAYOUT GAPS (assign between left/right if present) ---
+# --- FILL MISSING KEYS BY LAYOUT GAPS (updated per-row version) ---
 def fill_missing_by_layout(results, qwerty_layout):
-    rows, index_to_row_info, _ = build_detected_rows(results)
+    rows, _, _ = build_detected_rows(results)
     if not rows:
         return results
     row_map = map_rows_to_layout(results, qwerty_layout)
 
-    label_to_indices = {}
-    for i, r in enumerate(results):
-        if r.get("bbox") and r.get("label"):
-            label_to_indices.setdefault(r["label"], []).append(i)
-
-    def assign_between(det_row_id, left_label, right_label, target_label):
-        row = rows[det_row_id]
-        left_idx = next((i for i in row if results[i]["label"] == left_label), None)
-        right_idx = next((i for i in row if results[i]["label"] == right_label), None)
+    def assign_between_row(row_indices, left_label, right_label, target_label):
+        left_idx = next((i for i in row_indices if results[i]["label"] == left_label), None)
+        right_idx = next((i for i in row_indices if results[i]["label"] == right_label), None)
         if left_idx is None or right_idx is None:
             return False
         cx_left = results[left_idx]["center"]["cx"]
         cx_right = results[right_idx]["center"]["cx"]
         if cx_left >= cx_right:
             return False
-        between = [i for i in row if results[i]["label"] == "?" and cx_left < results[i]["center"]["cx"] < cx_right]
+        between = [i for i in row_indices
+                   if results[i]["label"] == "?"
+                   and cx_left < results[i]["center"]["cx"] < cx_right]
         if not between:
             return False
         mid = (cx_left + cx_right) / 2.0
         chosen = min(between, key=lambda i: abs(results[i]["center"]["cx"] - mid))
         results[chosen]["label"] = target_label
         results[chosen]["inferred"] = True
-        label_to_indices.setdefault(target_label, []).append(chosen)
         return True
 
-    for det_row_id, row in enumerate(rows):
+    for det_row_id, row_indices in enumerate(rows):
         layout_row_id = row_map.get(det_row_id, None)
         if layout_row_id is None:
             continue
         layout_row = qwerty_layout[layout_row_id]
+        labels_in_row = {results[idx]["label"] for idx in row_indices if results[idx]["label"] != "?"}
         for ci, lbl in enumerate(layout_row):
-            if lbl in label_to_indices:
+            if lbl in labels_in_row:
                 continue
             left_lbl = layout_row[ci - 1] if ci - 1 >= 0 else None
             right_lbl = layout_row[ci + 1] if ci + 1 < len(layout_row) else None
             if left_lbl and right_lbl:
-                assign_between(det_row_id, left_lbl, right_lbl, lbl)
+                assign_between_row(row_indices, left_lbl, right_lbl, lbl)
     return results
 
-# --- SPACEBAR HEURISTICS ---
+# --- FINAL NEIGHBOR-ONLY GAP FILL (no row mapping) ---
+def fill_missing_by_neighbors_no_map(results, qwerty_layout):
+    rows, _, _ = build_detected_rows(results)
+    if not rows:
+        return results
+
+    triplets = []
+    for layout_row in qwerty_layout:
+        for i in range(1, len(layout_row) - 1):
+            left_lbl = layout_row[i - 1]
+            target_lbl = layout_row[i]
+            right_lbl = layout_row[i + 1]
+            triplets.append((left_lbl, target_lbl, right_lbl))
+
+    for row_indices in rows:
+        labels_in_row = {results[idx]["label"]: idx for idx in row_indices if results[idx]["label"] != "?"}
+        for left_lbl, target_lbl, right_lbl in triplets:
+            if left_lbl in labels_in_row and right_lbl in labels_in_row and target_lbl not in labels_in_row:
+                left_idx = labels_in_row[left_lbl]
+                right_idx = labels_in_row[right_lbl]
+                cx_left = results[left_idx]["center"]["cx"]
+                cx_right = results[right_idx]["center"]["cx"]
+                if cx_left >= cx_right:
+                    continue
+                between = [i for i in row_indices
+                           if results[i]["label"] == "?"
+                           and cx_left < results[i]["center"]["cx"] < cx_right]
+                if not between:
+                    continue
+                mid = (cx_left + cx_right) / 2.0
+                chosen = min(between, key=lambda i: abs(results[i]["center"]["cx"] - mid))
+                results[chosen]["label"] = target_lbl
+                results[chosen]["inferred"] = True
+
+    return results
+
+# --- SPACEBAR LABELING BASED ON 'B' KEY POSITION AND WIDTH ---
+def label_spacebar_by_B(results, width_factor=3.0, dx_thresh_factor=1.0, dy_thresh_factor=0.6):
+    B_key = next((r for r in results if r.get("bbox") and r.get("label") == "B"), None)
+    if B_key is None:
+        for alt in ("V", "N"):
+            B_key = next((r for r in results if r.get("bbox") and r.get("label") == alt), None)
+            if B_key:
+                break
+
+    letter_widths = [r["bbox"]["w"] for r in results if r.get("bbox") and r.get("label") and len(r["label"]) == 1 and r["label"].isalpha()]
+    typical_w = statistics.median(letter_widths) if letter_widths else statistics.median([r["bbox"]["w"] for r in results if r.get("bbox")]) if results else 40
+
+    cx_ref = B_key["center"]["cx"] if B_key else None
+    cy_ref = B_key["center"]["cy"] if B_key else None
+    h_ref = B_key["bbox"]["h"] if B_key else statistics.median([r["bbox"]["h"] for r in results if r.get("bbox")]) if results else 30
+    w_ref = B_key["bbox"]["w"] if B_key else typical_w
+
+    expected_cx = cx_ref if cx_ref is not None else statistics.median([r["center"]["cx"] for r in results if r.get("bbox")]) if results else None
+    expected_cy = (cy_ref + h_ref) if cy_ref is not None else None
+    if expected_cx is None or expected_cy is None:
+        return results
+
+    dx_thresh = dx_thresh_factor * w_ref
+    dy_thresh = dy_thresh_factor * h_ref
+
+    idxs = [i for i, r in enumerate(results) if r.get("bbox")]
+    if not idxs:
+        return results
+    heights = [results[i]["bbox"]["h"] for i in idxs]
+    typical_h = statistics.median(heights) if heights else 50
+    centers = [(results[i]["center"]["cx"], results[i]["center"]["cy"]) for i in idxs]
+    row_positions = cluster_rows_by_y(centers, typical_h)
+    if not row_positions:
+        return results
+    bottom_cluster = row_positions[-1]
+    bottom_row_indices = [idxs[p] for p in bottom_cluster]
+
+    candidates = []
+    for i in bottom_row_indices:
+        r = results[i]
+        w = r["bbox"]["w"]
+        cx = r["center"]["cx"]
+        cy = r["center"]["cy"]
+        if w >= width_factor * w_ref and abs(cx - expected_cx) <= dx_thresh and abs(cy - expected_cy) <= dy_thresh:
+            candidates.append((w, i))
+
+    if not candidates:
+        return results
+
+    candidates.sort(key=lambda t: t[0], reverse=True)
+    _, best_idx = candidates[0]
+    results[best_idx]["label"] = "SPACE"
+    results[best_idx]["inferred"] = False
+    return results
+
+# --- SPACEBAR HEURISTICS (optional center marker) ---
 def get_space_center(results, offset_factor=1.25):
     reference_key = None
     for key in ["B", "V", "N"]:
         for r in results:
-            if r["label"] == key:
+            if r.get("bbox") and r["label"] == key:
                 reference_key = r
                 break
         if reference_key:
@@ -561,7 +644,9 @@ def detect_keyboard_keys(image_path, verbose=False, save_debug=True, include_unl
 
     raw_results = fix_ambiguous_by_row(raw_results)
     dedup_results = resolve_duplicate_labels(raw_results, qwerty_layout)
-    final_results = fill_missing_by_layout(dedup_results, qwerty_layout)
+    filled_results = fill_missing_by_layout(dedup_results, qwerty_layout)
+    filled_results = fill_missing_by_neighbors_no_map(filled_results, qwerty_layout)
+    final_results = label_spacebar_by_B(filled_results, width_factor=3.0, dx_thresh_factor=1.0, dy_thresh_factor=0.6)
 
     annotated = img.copy()
     for r in final_results:
@@ -573,18 +658,10 @@ def detect_keyboard_keys(image_path, verbose=False, save_debug=True, include_unl
         cv2.putText(annotated, lbl, (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.55,
                     (0, 0, 255) if lbl != "?" else (0, 165, 255), 1)
 
-    space = detect_spacebar(final_results)
-    if space:
-        if space.get("bbox"):
-            bx, by, bw, bh = space["bbox"]["x"], space["bbox"]["y"], space["bbox"]["w"], space["bbox"]["h"]
-            cv2.rectangle(annotated, (bx, by), (bx + bw, by + bh), (255, 0, 0), 2)
-            cv2.putText(annotated, "SPACE", (bx, by - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 0, 0), 1)
-        cx, cy = space["center"]["cx"], space["center"]["cy"]
+    space_info = detect_spacebar(final_results)
+    if space_info:
+        cx, cy = space_info["center"]["cx"], space_info["center"]["cy"]
         cv2.circle(annotated, (cx, cy), 5, (255, 0, 0), -1)
-        if space.get("bbox") is None:
-            final_results.append(space)
-        if verbose:
-            print(f"Space key: {space}")
 
     return annotated, final_results
 

@@ -12,7 +12,7 @@ ADDR_MX_CCW_COMPLIANCE_MARGIN = 27
 ADDR_MX_CW_COMPLIANCE_SLOPE = 28
 ADDR_MX_CCW_COMPLIANCE_SLOPE = 29
 ADDR_MX_GOAL_POSITION = 30
-ADDR_MX_MOVING_SPEED = 20
+ADDR_MX_MOVING_SPEED = 32
 ADDR_MX_PRESENT_POSITION = 36
 ADDR_MX_PUNCH = 48
 PROTOCOL_VERSION = 1.0
@@ -33,10 +33,10 @@ def setup_motors():
         packetHandler.write2ByteTxRx(portHandler, DXL_ID, ADDR_MX_CCW_COMPLIANCE_MARGIN, 0)
         packetHandler.write1ByteTxRx(portHandler, DXL_ID, ADDR_MX_CW_COMPLIANCE_SLOPE, 32)
         packetHandler.write1ByteTxRx(portHandler, DXL_ID, ADDR_MX_CCW_COMPLIANCE_SLOPE, 32)
-        packetHandler.write2ByteTxRx(portHandler, DXL_ID, ADDR_MX_MOVING_SPEED, 100)
+        packetHandler.write2ByteTxRx(portHandler, DXL_ID, ADDR_MX_MOVING_SPEED, 20)
     return portHandler, packetHandler
 
-def deg2dxl(servo,deg,opts=[150,58,133,245]):
+def deg2dxl(servo,deg,opts=[150,58,150,150]):
     match servo:
         case 1:
             #512=0, 240=a*90+512
@@ -99,9 +99,9 @@ def calculate_circle_step(phi):
 if __name__ == "__main__":
     img_id = 0
     # Test the functions
-    cap = cv2.VideoCapture(4)
+    cap = cv2.VideoCapture(2)
     portHandler, packetHandler = setup_motors()
-    T_03,T_04, T_05 = kinematics.forwards_kinematics(np.deg2rad(150-150), np.deg2rad(145-58), np.deg2rad(86-133), np.deg2rad(132-245))
+    T_03,T_04, T_05 = kinematics.forwards_kinematics(np.deg2rad(150-150), np.deg2rad(150-58), np.deg2rad(70-150), np.deg2rad(75-150))
     q = kinematics.inverseKinematics(T_04[0:3,0],T_04[0:3,3])
     #rot_tras([np.array([1,2,3])])
     #q = kinematics.inverseKinematics([1,0,0], [50,0,236])
@@ -112,13 +112,16 @@ if __name__ == "__main__":
         addr_goal=ADDR_MX_GOAL_POSITION,
         addr_present=ADDR_MX_PRESENT_POSITION,
         eps_deg=1.0, consecutive=3, timeout_s=10.0)
+    ret = False
     ret, frame = cap.read()
+    while not ret:
+        ret, frame = cap.read()
     filename = f"img_{img_id:03d}.jpg"
     cv2.imwrite(filename, frame)
     print("Saved", filename)
     img_id += 1
     sleep(1)
-    T_03_1,T_04_1, T_05_1 = kinematics.forwards_kinematics(np.deg2rad(150-150), np.deg2rad(148-58), np.deg2rad(78-133), np.deg2rad(138-245))
+    T_03_1,T_04_1, T_05_1 = kinematics.forwards_kinematics(np.deg2rad(100-150), np.deg2rad(148-58), np.deg2rad(70-150), np.deg2rad(80-150))
     q_1 = kinematics.inverseKinematics(T_04_1[0:3,0],T_04_1[0:3,3])
     set_angles([q_1[0],q_1[1][1],q_1[2][1],q_1[3][1]])
     wait.wait_until_stopped(packetHandler, portHandler,
@@ -126,8 +129,13 @@ if __name__ == "__main__":
         addr_goal=ADDR_MX_GOAL_POSITION,
         addr_present=ADDR_MX_PRESENT_POSITION,
         eps_deg=1.0, consecutive=3, timeout_s=10.0)
-
+    #cap = cv2.VideoCapture(2)
+    for _ in range(10):
+        cap.read()
     ret, frame = cap.read()
+    while not ret:
+        print("New frame")
+        ret, frame = cap.read()
     filename = f"img_{img_id:03d}.jpg"
     cv2.imwrite(filename, frame)
     print("Saved", filename)

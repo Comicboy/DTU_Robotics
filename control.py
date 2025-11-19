@@ -86,7 +86,7 @@ def set_angles(q):
         dxl_pos = deg2dxl(servo_id, angle_deg)
 
         # Check sul mapping reale 0..1023 (con finestre 50-950)
-        if 50 <= dxl_pos <= 950:
+        if 50 <= dxl_pos <= 1023:
             packetHandler.write2ByteTxRx(
                 portHandler, servo_id, ADDR_MX_GOAL_POSITION, dxl_pos
             )
@@ -131,6 +131,10 @@ def calculate_circle_step(phi):
     radius = 32  # Radius of the circle
     rot = np.array([0,np.cos(phi),np.sin(phi)])
     return p_c + radius * rot
+
+# go from ref 1 to ref 2
+def transformation_between(T_from, T_to):
+    return np.linalg.inv(T_from) @ T_to
 
 
 if __name__ == "__main__":
@@ -181,21 +185,10 @@ if __name__ == "__main__":
     img_id += 1
 
 
-    '''
-    for i in range(36):
-        q = kinematics.inverseKinematics([0,0,0],calculate_circle_step(2*np.pi/36*i))
-        print(np.rad2deg(q[0]), np.rad2deg(q[1][0]), np.rad2deg(q[2][0]), np.rad2deg(q[3][0]))
-        print(deg2dxl(1,np.rad2deg(q[0])), deg2dxl(2,np.rad2deg(q[1][0])), deg2dxl(3,np.rad2deg(q[2][0])), deg2dxl(4,np.rad2deg(q[3][0])))
-        #set_angles([q[0]), deg2dxl(2,np.rad2deg(q[1][0])), deg2dxl(3,np.rad2deg(q[2][0])), deg2dxl(4,np.rad2deg(q[3][0]))])
-        set_angles([q[0],q[1][1],q[2][1],q[3][1]])
-        sleep(0.2)
-    '''
-    #sleep(2)
-    #set_angles([q[0],q[1][1],q[2][1],q[3][1]])
-    #print("q = ", np.rad2deg(q[0]), np.rad2deg(q[1][0]), np.rad2deg(q[2][0]), np.rad2deg(q[3][0]))
-    #packetHandler.write2ByteTxRx(portHandler, 1, ADDR_MX_GOAL_POSITION, deg2dxl(1,np.rad2deg(q[0])))
-    #packetHandler.write2ByteTxRx(portHandler, 2, ADDR_MX_GOAL_POSITION, deg2dxl(2,np.rad2deg(q[1][0])))
-    #packetHandler.write2ByteTxRx(portHandler, 3, ADDR_MX_GOAL_POSITION, deg2dxl(3,np.rad2deg(q[2][0])))
-    #packetHandler.write2ByteTxRx(portHandler, 4, ADDR_MX_GOAL_POSITION, deg2dxl(4,np.rad2deg(q[3][0])))
+    T_05_to_05_1 = transformation_between(T_05, T_05_1)
+    print("Transformation between the 2 position:\n", T_05_to_05_1)
 
-    #print(deg2dxl(4,np.rad2deg(q[3][0])))
+    T_reconstructed = transformation_between(T_05_1, T_05)
+
+    q_return = kinematics.inverseKinematics(T_reconstructed[0:3,0], T_reconstructed[0:3,3])
+    set_angles([q_return[0], q_return[1][1], q_return[2][1], q_return[3][1]])

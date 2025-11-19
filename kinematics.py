@@ -70,35 +70,97 @@ def inverse_kinematics(phi):
     return q
 '''
 
-def inverseKinematics(x,o):
-    d4=50
-    x_c=np.round(o[0]-x[0]*d4,4)
-    y_c=np.round(o[1]-x[1]*d4,4)
-    z_c=np.round(o[2]-x[2]*d4,4)
-    d1=50
-    #1 = atan2(x_c,y_c);
-    q0 = np.arctan2(y_c,x_c)
-    r_sq=x_c**2+y_c**2
-    s=z_c-d1
-    c2=np.round((r_sq+s*s-93*93-93*93)/(2*93*93),4)
-    #print("c2 =", c2)
-    #q3 = [atan2(c3,sqrt(1-c3^2)) atan2(c3,-sqrt(1-c3^2))];
-    #print("atans =  ",np.rad2deg(np.atan2(np.sqrt(1-c2*c2),c2)),np.rad2deg(np.atan2(-np.sqrt(1-c2*c2),c2)))
-    q2 = [np.atan2(np.sqrt(1-c2*c2),c2),np.atan2(-np.sqrt(1-c2*c2),c2)]
-    #print("q2 =", np.rad2deg(q2))
-    #q2 = atan2(sqrt(r_sq),s)-atan2(93+93*c3,93*sin(q3(1)));
-    q1 = [np.atan2(s,np.sqrt(r_sq))-np.atan2(93*np.sin(q2[0]),93+93*c2),np.atan2(s,np.sqrt(r_sq))-np.atan2(93*np.sin(q2[1]),93+93*c2)]
-    #print("q1 = ", np.rad2deg(q1))
-    #print("q1 =", np.rad2deg(q1))
-    #q3 = [np.arctan2(np.round(np.sqrt(1-x[2]**2),4),x[2]), np.atan2(x[1]*d4,x[0]*d4)]
-    q3 = [np.arctan2(x[2],np.sqrt(x[0]**2+x[1]**2))-q1[0]-q2[0],np.arctan2(x[2],np.sqrt(x[0]**2+x[1]**2))-q1[1]-q2[1]]
-    #print("q3 = ", np.rad2deg(q3))
-    #print("q3 = ", np.rad2deg(q3))
-    #q4 = np.atan2(x(3),np.sqrt(1-x(3)^2))
-    #q4 = atan2(sqrt(1-x(3)^2),x(3));
-    #q4 = atan2(sqrt(1-(sin(q1)*x(1)-cos(q1)*x(2))^2),sin(q1)*x(1)-cos(q1)*x(2));
-    #q4 = atan2(x(2),x(1));
-    return [q0,q1,q2,q3]
+#def inverseKinematics(x,o):
+#    d4=50
+#    x_c=np.round(o[0]-x[0]*d4,4)
+#    y_c=np.round(o[1]-x[1]*d4,4)
+#    z_c=np.round(o[2]-x[2]*d4,4)
+#    d1=50
+#    #1 = atan2(x_c,y_c);
+#    q0 = np.arctan2(y_c,x_c)
+#    r_sq=x_c**2+y_c**2
+#    s=z_c-d1
+#    c2=np.round((r_sq+s*s-93*93-93*93)/(2*93*93),4)
+#    #print("c2 =", c2)
+#    #q3 = [atan2(c3,sqrt(1-c3^2)) atan2(c3,-sqrt(1-c3^2))];
+#    #print("atans =  ",np.rad2deg(np.atan2(np.sqrt(1-c2*c2),c2)),np.rad2deg(np.atan2(-np.sqrt(1-c2*c2),c2)))
+#    q2 = [np.atan2(np.sqrt(1-c2*c2),c2),np.atan2(-np.sqrt(1-c2*c2),c2)]
+#    #print("q2 =", np.rad2deg(q2))
+#    #q2 = atan2(sqrt(r_sq),s)-atan2(93+93*c3,93*sin(q3(1)));
+#    q1 = [np.atan2(s,np.sqrt(r_sq))-np.atan2(93*np.sin(q2[0]),93+93*c2),np.atan2(s,np.sqrt(r_sq))-np.atan2(93*np.sin(q2[1]),93+93*c2)]
+#    #print("q1 = ", np.rad2deg(q1))
+#    #print("q1 =", np.rad2deg(q1))
+#    #q3 = [np.arctan2(np.round(np.sqrt(1-x[2]**2),4),x[2]), np.atan2(x[1]*d4,x[0]*d4)]
+#    q3 = [np.arctan2(x[2],np.sqrt(x[0]**2+x[1]**2))-q1[0]-q2[0],np.arctan2(x[2],np.sqrt(x[0]**2+x[1]**2))-q1[1]-q2[1]]
+#    #print("q3 = ", np.rad2deg(q3))
+#    #print("q3 = ", np.rad2deg(q3))
+#    #q4 = np.atan2(x(3),np.sqrt(1-x(3)^2))
+#    #q4 = atan2(sqrt(1-x(3)^2),x(3));
+#    #q4 = atan2(sqrt(1-(sin(q1)*x(1)-cos(q1)*x(2))^2),sin(q1)*x(1)-cos(q1)*x(2));
+#    #q4 = atan2(x(2),x(1));
+#    return [q0,q1,q2,q3]
+
+import numpy as np
+
+# Limiti dei servo in gradi
+SERVO_LIMITS_DEG = {
+    1: (-120, 120),
+    2: (-90, 90),
+    3: (-90, 120),
+    4: (-60, 60)
+}
+
+def inverseKinematics(x, o):
+    d4 = 50
+    x_c = np.round(o[0] - x[0]*d4, 4)
+    y_c = np.round(o[1] - x[1]*d4, 4)
+    z_c = np.round(o[2] - x[2]*d4, 4)
+    d1 = 50
+
+    # Calcolo angoli
+    q0 = np.arctan2(y_c, x_c)
+    r_sq = x_c**2 + y_c**2
+    s = z_c - d1
+
+    c2 = np.round((r_sq + s*s - 93*93 - 93*93) / (2*93*93), 4)
+    q2 = [np.arctan2(np.sqrt(1-c2*c2), c2), np.arctan2(-np.sqrt(1-c2*c2), c2)]
+    q1 = [
+        np.arctan2(s, np.sqrt(r_sq)) - np.arctan2(93*np.sin(q2[0]), 93 + 93*c2),
+        np.arctan2(s, np.sqrt(r_sq)) - np.arctan2(93*np.sin(q2[1]), 93 + 93*c2)
+    ]
+    q3 = [
+        np.arctan2(x[2], np.sqrt(x[0]**2 + x[1]**2)) - q1[0] - q2[0],
+        np.arctan2(x[2], np.sqrt(x[0]**2 + x[1]**2)) - q1[1] - q2[1]
+    ]
+
+    # Converto tutto in gradi per applicare i limiti
+    q0_deg = np.rad2deg(q0)
+    q1_deg = [np.rad2deg(a) for a in q1]
+    q2_deg = [np.rad2deg(a) for a in q2]
+    q3_deg = [np.rad2deg(a) for a in q3]
+
+    # Applica limiti servo
+    def limit(angle_deg, servo_id):
+        min_deg, max_deg = SERVO_LIMITS_DEG[servo_id]
+        if angle_deg < min_deg:
+            return min_deg
+        elif angle_deg > max_deg:
+            return max_deg
+        return angle_deg
+
+    q0_deg = limit(q0_deg, 1)
+    q1_deg = [limit(a, 2) for a in q1_deg]
+    q2_deg = [limit(a, 3) for a in q2_deg]
+    q3_deg = [limit(a, 4) for a in q3_deg]
+
+    # Ritorna in radianti (per compatibilità con set_angles)
+    q0 = np.deg2rad(q0_deg)
+    q1 = [np.deg2rad(a) for a in q1_deg]
+    q2 = [np.deg2rad(a) for a in q2_deg]
+    q3 = [np.deg2rad(a) for a in q3_deg]
+
+    return [q0, q1, q2, q3]
+
 
 if __name__ == "__main__":
     # Test the functions

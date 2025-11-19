@@ -17,7 +17,7 @@ ADDR_MX_PRESENT_POSITION = 36
 ADDR_MX_PUNCH = 48
 PROTOCOL_VERSION = 1.0
 DXL_IDS = [1,2,3,4]
-DEVICENAME = '/dev/ttyACM0'
+DEVICENAME = 'COM3'
 BAUDRATE = 1000000
 TORQUE_ENABLE = 1
 TORQUE_DISABLE = 0
@@ -36,7 +36,7 @@ def setup_motors():
         packetHandler.write2ByteTxRx(portHandler, DXL_ID, ADDR_MX_MOVING_SPEED, 20)
     return portHandler, packetHandler
 
-def deg2dxl(servo,deg,opts=[150,58,150,150]):
+def deg2dxl(servo,deg,opts=[150,60,133,240]):
     match servo:
         case 1:
             #512=0, 240=a*90+512
@@ -50,12 +50,49 @@ def deg2dxl(servo,deg,opts=[150,58,150,150]):
         
     return int(dxl)
 
+#def set_angles(q):
+#    for id in range(len(q)):
+#        if deg2dxl(id+1,np.rad2deg(q[id]))>=50 and deg2dxl(id+1,np.rad2deg(q[id]))<=950:
+#            packetHandler.write2ByteTxRx(portHandler, id+1, ADDR_MX_GOAL_POSITION, deg2dxl(id+1,np.rad2deg(q[id])))
+#        else:
+#            print("Angle out of range for servo ", id+1,": ", deg2dxl(id+1,np.rad2deg(q[id])))
+
 def set_angles(q):
+
+    # Limiti in gradi per sicurezza (adattali se necessario)
+    limits_deg = {
+        1: (-120, 120),
+        2: (-90, 90),
+        3: (-90, 120),
+        4: (-60, 60),   # <-- servo 4 soffre, quindi limiti stretti
+    }
+
     for id in range(len(q)):
-        if deg2dxl(id+1,np.rad2deg(q[id]))>=50 and deg2dxl(id+1,np.rad2deg(q[id]))<=950:
-            packetHandler.write2ByteTxRx(portHandler, id+1, ADDR_MX_GOAL_POSITION, deg2dxl(id+1,np.rad2deg(q[id])))
+        servo_id = id + 1
+
+        # Converto IK → gradi
+        angle_deg = np.rad2deg(q[id])
+
+        # Applico limiti software
+        min_deg, max_deg = limits_deg[servo_id]
+        if angle_deg < min_deg:
+            print(f"[WARN] Servo {servo_id} limited: {angle_deg:.2f}° → {min_deg}°")
+            angle_deg = min_deg
+        elif angle_deg > max_deg:
+            print(f"[WARN] Servo {servo_id} limited: {angle_deg:.2f}° → {max_deg}°")
+            angle_deg = max_deg
+
+        # Calcolo posizione Dynamixel
+        dxl_pos = deg2dxl(servo_id, angle_deg)
+
+        # Check sul mapping reale 0..1023 (con finestre 50-950)
+        if 50 <= dxl_pos <= 950:
+            packetHandler.write2ByteTxRx(
+                portHandler, servo_id, ADDR_MX_GOAL_POSITION, dxl_pos
+            )
         else:
-            print("Angle out of range for servo ", id+1,": ", deg2dxl(id+1,np.rad2deg(q[id])))
+            print(f"Angle out of range for servo {servo_id}: {dxl_pos}")
+
 
 def rot_tras(I, t, d):
 # ROT_MAT crea la matrice omogenea 4x4
@@ -99,10 +136,12 @@ def calculate_circle_step(phi):
 if __name__ == "__main__":
     img_id = 0
     # Test the functions
-    cap = cv2.VideoCapture(2)
+    cap = cv2.VideoCapture(1)
     portHandler, packetHandler = setup_motors()
-    T_03,T_04, T_05 = kinematics.forwards_kinematics(np.deg2rad(150-150), np.deg2rad(150-58), np.deg2rad(70-150), np.deg2rad(75-150))
+    T_03,T_04, T_05 = kinematics.forwards_kinematics(np.deg2rad(150-150), np.deg2rad(147-60), np.deg2rad(86-133), np.deg2rad(134-240))
     q = kinematics.inverseKinematics(T_04[0:3,0],T_04[0:3,3])
+
+    print("Servo 4 angle (deg) =", np.rad2deg(q[3][1]))
     #rot_tras([np.array([1,2,3])])
     #q = kinematics.inverseKinematics([1,0,0], [50,0,236])
     print(np.rad2deg([q[0],q[1][1],q[2][1],q[3][1]]))
@@ -121,7 +160,7 @@ if __name__ == "__main__":
     print("Saved", filename)
     img_id += 1
     sleep(1)
-    T_03_1,T_04_1, T_05_1 = kinematics.forwards_kinematics(np.deg2rad(100-150), np.deg2rad(148-58), np.deg2rad(70-150), np.deg2rad(80-150))
+    T_03_1,T_04_1, T_05_1 = kinematics.forwards_kinematics(np.deg2rad(150-150), np.deg2rad(149-60), np.deg2rad(79-133), np.deg2rad(138-240))
     q_1 = kinematics.inverseKinematics(T_04_1[0:3,0],T_04_1[0:3,3])
     set_angles([q_1[0],q_1[1][1],q_1[2][1],q_1[3][1]])
     wait.wait_until_stopped(packetHandler, portHandler,

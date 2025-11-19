@@ -83,13 +83,16 @@ def inverseKinematics(x,o):
     c2=np.round((r_sq+s*s-93*93-93*93)/(2*93*93),4)
     #print("c2 =", c2)
     #q3 = [atan2(c3,sqrt(1-c3^2)) atan2(c3,-sqrt(1-c3^2))];
+    #print("atans =  ",np.rad2deg(np.atan2(np.sqrt(1-c2*c2),c2)),np.rad2deg(np.atan2(-np.sqrt(1-c2*c2),c2)))
     q2 = [np.atan2(np.sqrt(1-c2*c2),c2),np.atan2(-np.sqrt(1-c2*c2),c2)]
     #print("q2 =", np.rad2deg(q2))
     #q2 = atan2(sqrt(r_sq),s)-atan2(93+93*c3,93*sin(q3(1)));
     q1 = [np.atan2(s,np.sqrt(r_sq))-np.atan2(93*np.sin(q2[0]),93+93*c2),np.atan2(s,np.sqrt(r_sq))-np.atan2(93*np.sin(q2[1]),93+93*c2)]
+    #print("q1 = ", np.rad2deg(q1))
     #print("q1 =", np.rad2deg(q1))
     #q3 = [np.arctan2(np.round(np.sqrt(1-x[2]**2),4),x[2]), np.atan2(x[1]*d4,x[0]*d4)]
     q3 = [np.arctan2(x[2],np.sqrt(x[0]**2+x[1]**2))-q1[0]-q2[0],np.arctan2(x[2],np.sqrt(x[0]**2+x[1]**2))-q1[1]-q2[1]]
+    #print("q3 = ", np.rad2deg(q3))
     #print("q3 = ", np.rad2deg(q3))
     #q4 = np.atan2(x(3),np.sqrt(1-x(3)^2))
     #q4 = atan2(sqrt(1-x(3)^2),x(3));
@@ -99,18 +102,28 @@ def inverseKinematics(x,o):
 
 if __name__ == "__main__":
     # Test the functions
-    T_03,T_04, T_05 = forwards_kinematics(np.deg2rad(0), np.deg2rad(45), np.deg2rad(-45), np.deg2rad(0))
+    T_03,T_04, T_05 = forwards_kinematics(np.deg2rad(150-150), np.deg2rad(145-58), np.deg2rad(86-133), np.deg2rad(132-245))
+    T_03_1,T_04_1, T_05_1 = forwards_kinematics(np.deg2rad(150-150), np.deg2rad(148-58), np.deg2rad(78-133), np.deg2rad(138-245))
 
-    #print("T_04:\n", T_04)
+    print("T_05:\n", T_05)
+    print("T_05_1:\n", T_05_1)
 
-    q = inverseKinematics(T_04[0:3,0],T_04[0:3,3])
+    q = inverseKinematics(np.round(T_04[0:3,0],4),np.round(T_04[0:3,3],4))
 
     #q = inverseKinematics([1,0,0], [150,0,50])
 
-    print("q = ", np.rad2deg(q[0]), np.rad2deg(q[1][0]), np.rad2deg(q[2][0]), np.rad2deg(q[3][0]))
-    T_test,T_test_2,_ = forwards_kinematics(q[0], q[1][0], q[2][0], q[3][0])
+    #print("q_0 = ", np.rad2deg(q[0]), np.rad2deg(q[1][0]), np.rad2deg(q[2][0]), np.rad2deg(q[3][0]))
+    #print("q_1 = ", np.rad2deg(q[0]), np.rad2deg(q[1][1]), np.rad2deg(q[2][1]), np.rad2deg(q[3][1]))
+    T_test,T_test_2,_ = forwards_kinematics(np.round(q[0]), q[1][0], q[2][0], q[3][0])
+    T_test_1,T_test_1_2,_ = forwards_kinematics(q[0], q[1][1], q[2][1], q[3][1])
 
-    print("DDifference = ",np.round(T_test_2 - T_04,3))
+    
+
+    #print("DDifference = \n",T_test_2 - T_04)
+    #print("DDifference_1 = \n",T_test_1_2 - T_04)
+    #print("T_04:\n", np.round(T_04,4))
+    #print("T_test_2:\n", np.round(T_test_2,4))
+    #print("T_test_1_2:\n", np.round(T_test_1_2,4))
 
     #print("T_03:\n", T_test)
     #print("T_04:\n", T_test_2)

@@ -1,4 +1,20 @@
 # wait.py
+# How to call it in another file:
+#   from wait import wait_until_stopped
+#   wait_until_stopped(
+#       packetHandler, portHandler,
+#       ids=DXL_IDS,
+#       addr_goal=ADDR_MX_GOAL_POSITION,
+#       addr_present=ADDR_MX_PRESENT_POSITION,
+#       addr_moving=46,          # or your moving-flag address
+#       eps_deg=1.0,
+#       consecutive=3,
+#       timeout_s=6.0
+#   )
+#
+# This helper blocks until all given servos have stopped moving AND the
+# present position is within eps_deg of the goal, or until a timeout.
+
 import time
 
 def wait_until_stopped(packetHandler, portHandler,

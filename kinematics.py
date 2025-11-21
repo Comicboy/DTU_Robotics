@@ -47,90 +47,83 @@ def limit_angle(angle_deg, servo_id):
 
 
 
-def inverseKinematics(pos, x_dir_z):
-    """
-    Compute 4-DOF inverse kinematics for a 4R arm.
+import numpy as np
+
+#def inverseKinematics(pos, x_dir_z):
+#    """
+#    4-DOF IK: usa la tua parte di calcolo del wrist center
+#    ma calcola gli angoli come nel collega.
+#    
+#    Parameters
+#    ----------
+#    pos : array-like, shape (3,)
+#        Desired end-effector position [x, y, z].
+#    x_dir_z : float
+#        z-component of the end-effector's x-axis (orientation along stylus).
+#    
+#    Returns
+#    -------
+#    q : list of 4 elements
+#        Joint angles [q0, q1, q2, q3] in radians.
+#    """
+#    # --- Parametri robot ---
+#    a2, a3, a4, d1 = 93, 93, 50, 50
+#    o_04 = np.array(pos)
+#    x_04 = x_dir_z
+#
+#    # --- Calcolo tuo centro polso ---
+#    d_4z = a4 * x_04
+#    u = np.sqrt(a4**2 - d_4z**2)
+#
+#    # Angolo base preliminare
+#    theta_base = np.arctan2(o_04[1], o_04[0])
+#
+#    # Proiezione polso
+#    x43 = u * np.cos(theta_base)
+#    y43 = u * np.sin(theta_base)
+#
+#    # Centro del polso
+#    xc = o_04[0] - x43
+#    yc = o_04[1] - y43
+#    zc = o_04[2] - d_4z
+#
+#    # --- Angoli come nel collega ---
+#    q0 = np.arctan2(yc, xc)
+#    r_sq = xc**2 + yc**2
+#    s = zc - d1
+#
+#    c2 = np.round((r_sq + s**2 - a2**2 - a3**2) / (2 * a2 * a3), 4)
+#    s3_options = [np.sqrt(1 - c2**2), -np.sqrt(1 - c2**2)]
+#
+#    q2 = [np.arctan2(s3, c2) for s3 in s3_options]
+#    q1 = [np.arctan2(s, np.sqrt(r_sq)) - np.arctan2(a3*np.sin(q2[0]), a2 + a3*c2),
+#          np.arctan2(s, np.sqrt(r_sq)) - np.arctan2(a3*np.sin(q2[1]), a2 + a3*c2)]
+#    q3 = [np.arctan2(x_04, np.sqrt(x_04**2 + 0**2)) - q1[0] - q2[0],  # x_dir_z usato per polso
+#          np.arctan2(x_04, np.sqrt(x_04**2 + 0**2)) - q1[1] - q2[1]]
+#
+#    # Preferiamo soluzione elbow-up
+#    return [q0, q1[0], q2[0], q3[0]]
+
+
+def inverseKinematics(x,o):
+    d4=50
+    x_c=np.round(o[0]-x[0]*d4,4)
+    y_c=np.round(o[1]-x[1]*d4,4)
+    z_c=np.round(o[2]-x[2]*d4,4)
+    d1=50
     
-    Parameters
-    ----------
-    pos : array-like, shape (3,)
-        Desired end-effector position [x, y, z].
-    x_dir_z : float
-        z-component of the end-effector's x-axis (orientation along stylus).
+    q0 = np.arctan2(y_c,x_c)
+    r_sq=x_c**2+y_c**2
+    s=z_c-d1
+    c2=np.round((r_sq+s*s-93*93-93*93)/(2*93*93),4)
     
-    Returns
-    -------
-    q_rel : ndarray, shape (4,)
-        Joint angles [q1, q2, q3, q4] in radians relative to servo zero (0=center),
-        preferred elbow-up configuration.
-    """
-
-    # Robot parameters
-    a2, a3, a4, d1 = 93, 93, 50, 50
-    o_04 = np.array(pos)
-    x_04 = x_dir_z
-
-    # Compute wrist offset
-    d_4z = a4 * x_04
-    u = np.sqrt(a4**2 - d_4z**2)
-
-    # Base angle (theta1)
-    theta1_deg = np.rad2deg(np.arctan2(o_04[1], o_04[0]))
-
-    # Wrist projection
-    x43 = u * np.cos(np.deg2rad(theta1_deg))
-    y43 = u * np.sin(np.deg2rad(theta1_deg))
-
-    # Wrist center
-    xc = o_04[0] - x43
-    yc = o_04[1] - y43
-    zc = o_04[2] - d_4z
-
-    # Planar distance
-    r = np.sqrt(xc**2 + yc**2)
-    s = zc - d1
-
-    # Elbow angles
-    c3 = (r**2 + s**2 - a2**2 - a3**2) / (2 * a2 * a3)
-    s3_options = [np.sqrt(1 - c3**2), -np.sqrt(1 - c3**2)]  # elbow-up, elbow-down
-
-    theta2_options = [np.rad2deg(np.arctan2(s, r) - np.arctan2(a3*s3, a2 + a3*c3)) for s3 in s3_options]
-    theta3_options = [np.rad2deg(np.arctan2(s3, c3)) for s3 in s3_options]
-    alfa = np.rad2deg(np.arcsin(x_04))
-    theta4_options = [alfa - t2 - t3 for t2, t3 in zip(theta2_options, theta3_options)]
-
-    # Create candidate solutions relative to servo zero
-    def to_relative(theta_deg, servo_id):
-        return theta_deg - MOTOR_LIMITS[servo_id]["deg_zero"]
-
-    solA_rel = [to_relative(theta1_deg, 1),
-                to_relative(theta2_options[0], 2),
-                to_relative(theta3_options[0], 3),
-                to_relative(theta4_options[0], 4)]  # elbow-up
-
-    solB_rel = [to_relative(theta1_deg, 1),
-                to_relative(theta2_options[1], 2),
-                to_relative(theta3_options[1], 3),
-                to_relative(theta4_options[1], 4)]  # elbow-down
-
-    # ------------------ validate with limits (relative) ------------------
-    def is_valid(sol):
-        for i, ang in enumerate(sol, start=1):
-            lo = SERVO_LIMITS_DEG[i][0] - MOTOR_LIMITS[i]["deg_zero"]
-            hi = SERVO_LIMITS_DEG[i][1] - MOTOR_LIMITS[i]["deg_zero"]
-            if not (lo <= ang <= hi):
-                return False
-        return True
-
-    # Prefer elbow-up
-    if is_valid(solA_rel):
-        chosen = solA_rel
-    elif is_valid(solB_rel):
-        chosen = solB_rel
-    else:
-        # Clamp elbow-up if no solution valid
-        chosen = [limit_angle(solA_rel[i], i+1) for i in range(4)]
-
-    # Convert to radians
-    return np.deg2rad(chosen)
-
+    q2 = [np.atan2(np.sqrt(1-c2*c2),c2),
+          np.atan2(-np.sqrt(1-c2*c2),c2)]
+    
+    q1 = [np.atan2(s,np.sqrt(r_sq))-np.atan2(93*np.sin(q2[0]),
+          93+93*c2),np.atan2(s,np.sqrt(r_sq))-np.atan2(93*np.sin(q2[1]),93+93*c2)]
+    
+    q3 = [np.arctan2(x[2],np.sqrt(x[0]**2+x[1]**2))-q1[0]-q2[0],
+          np.arctan2(x[2],np.sqrt(x[0]**2+x[1]**2))-q1[1]-q2[1]]
+    
+    return [q0,q1,q2,q3]

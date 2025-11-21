@@ -26,21 +26,30 @@ def move_to_logical_angles(portHandler, packetHandler, theta_logical_deg):
     # FK
     T03, T04, T05 = kinematics.forwards_kinematics(*theta_logical_rad)
 
-    # IK
-    q_rad = kinematics.inverseKinematics(T04[:3, 3], 0)
-    print("IK returned angles (deg):", np.rad2deg(q_rad))
+    # IK usando la nuova funzione combinata
+    q_rad_all = kinematics.inverseKinematics(T04[:3, 0], T04[:3,3])
+
+    # Scegli la soluzione "elbow-up" (primo elemento di ogni lista dove presente)
+    q_rad = [
+        q_rad_all[0],               # q0
+        q_rad_all[1][0],            # q1
+        q_rad_all[2][0],            # q2
+        q_rad_all[3][0]             # q3
+    ]
+
+    # Converti in gradi interi
+    q_deg_int = np.round(np.rad2deg(q_rad)).astype(int)
+    print("IK returned angles (deg, rounded):", q_deg_int)
+
+    # Riconverti in radianti per la funzione di controllo
+    q_rad_int = np.deg2rad(q_deg_int)
 
     # Manda ai motori
-    control.set_angles(portHandler, packetHandler, q_rad)
+    control.set_angles(portHandler, packetHandler, q_rad_int)
 
-    # Aspetta che si fermi
-    wait.wait_until_stopped(
-        packetHandler, portHandler,
-        ids=control.DXL_IDS,
-        addr_goal=control.ADDR_MX_GOAL_POSITION,
-        addr_present=control.ADDR_MX_PRESENT_POSITION,
-        eps_deg=1.0, consecutive=3, timeout_s=10
-    )
+    # Aspetta che si fermi un po’ (puoi aumentare sleep se il timeout persiste)
+    sleep(3)
+
 
 def capture_image(cap, img_id):
     ret, frame = cap.read()
@@ -63,7 +72,7 @@ if __name__ == "__main__":
     control.setup_motors(portHandler, packetHandler)
 
     # ------------------ Prima posizione ------------------
-    theta_logical_0 = [0, 50, 10, 0]  # gradi logici
+    theta_logical_0 = [20, -90, 30, 0]  # gradi logici
     move_to_logical_angles(portHandler, packetHandler, theta_logical_0)
     img_id = capture_image(cap, img_id)
 

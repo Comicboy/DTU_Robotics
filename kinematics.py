@@ -27,15 +27,19 @@ def forwards_kinematics(theta_1, theta_2, theta_3, theta_4):
     T_05 = T_03 @ T_35
     return T_03, T_04, T_05
 
-def inverseKinematics(x, o, return_both=False):
+def inverseKinematics(x_dir, o, return_both=False):
+    """
+    x_dir: vettore direzione dell'end-effector (verso il basso = [0,0,-1])
+    o: posizione obiettivo [x,y,z]
+    """
     d4 = 50
     d1 = 50
     a2 = 93
     a3 = 93
 
-    x_c = o[0] - x[0]*d4
-    y_c = o[1] - x[1]*d4
-    z_c = o[2] - x[2]*d4
+    x_c = o[0] - x_dir[0]*d4
+    y_c = o[1] - x_dir[1]*d4
+    z_c = o[2] - x_dir[2]*d4
 
     q0 = np.arctan2(y_c, x_c)
 
@@ -54,21 +58,20 @@ def inverseKinematics(x, o, return_both=False):
     q1_up = np.arctan2(s, np.sqrt(r_sq)) - np.arctan2(a3*s2_up, a2 + a3*c2)
     q1_down = np.arctan2(s, np.sqrt(r_sq)) - np.arctan2(a3*s2_down, a2 + a3*c2)
 
-    q3_up = np.arctan2(x[2], np.sqrt(x[0]**2 + x[1]**2)) - q1_up - q2_up
-    q3_down = np.arctan2(x[2], np.sqrt(x[0]**2 + x[1]**2)) - q1_down - q2_down
+    # Polso orientato secondo x_dir
+    q3_up   = np.arctan2(-x_dir[1], -x_dir[2]) - q1_up - q2_up
+    q3_down = np.arctan2(-x_dir[1], -x_dir[2]) - q1_down - q2_down
 
     if return_both:
-        return (
-            np.array([q0, q1_up, q2_up, q3_up]),
-            np.array([q0, q1_down, q2_down, q3_down])
-        )
+        # q_down = gomito giù, q_up = gomito su
+        return np.array([q0, q1_down, q2_down, q3_down]), np.array([q0, q1_up, q2_up, q3_up])
 
     return np.array([q0, q1_up, q2_up, q3_up])
 
 
 def inverseKinematics_position(pos, x_dir=np.array([0,0,0]), return_both=False):
-    q_up, q_down = inverseKinematics(x_dir, pos, return_both=True)
+    q_down, q_up = inverseKinematics(x_dir, pos, return_both=True)
+    
     if return_both:
-        return q_up, q_down
+        return q_up, q_down   # ritorna sempre [Elbow Up, Elbow Down]
     return q_up
-

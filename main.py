@@ -105,20 +105,68 @@ def draw_circle_motion(portHandler, packetHandler, steps=5, z_fixed=50): ##### d
     print("--- Circle finished ---\n")
 
 
+def follow_vertical_trajectory(portHandler, packetHandler, x_fixed, y_fixed, z_values, elbow="up", delay=0.1):
+    """
+    Traiettoria verticale con polso sempre verso il basso.
+    """
+    print("\n--- Following vertical trajectory (stylus down) ---")
+    
+    x_dir = np.array([0, 0, -1])  # direzione fissa verso il basso
+    
+    for z in z_values:
+        pos = np.array([x_fixed, y_fixed, z])
+        q_up, q_down = kinematics.inverseKinematics_position(pos, x_dir=x_dir, return_both=True)
+        
+        if elbow.lower() == "up":
+            q = q_up
+        else:
+            q = q_down
+        
+        control.set_angles(portHandler, packetHandler, q)
+        sleep(delay)
+    
+    print("--- Trajectory finished ---\n")
 
+
+def go_home(portHandler, packetHandler, elbow="down"):
+    """
+    Porta il braccio nella posizione di HOME.
+    elbow: "up" o "down" per scegliere la configurazione del gomito.
+    """
+    # Definisci la posizione home (puoi modificare questi valori)
+    home_pos = np.array([100, 0, 100])   # X, Y, Z in mm
+    x_dir = np.array([0, 0, -1])         # polso verso il basso
+
+    # Calcola IK
+    q_up, q_down = kinematics.inverseKinematics_position(home_pos, x_dir=x_dir, return_both=True)
+
+    # Scegli la configurazione del gomito
+    if elbow.lower() == "up":
+        q_target = q_up
+        sol_name = "ELBOW UP"
+    else:
+        q_target = q_down
+        sol_name = "ELBOW DOWN"
+
+    print(f"Moving to HOME ({sol_name}): {np.round(np.rad2deg(q_target)).astype(int)}")
+
+    # Manda i comandi ai motori
+    control.set_angles(portHandler, packetHandler, q_target)
+    sleep(2)  # attendi che il braccio raggiunga la posizione
 
 
 ###### MAIN CIRCLE
-if __name__ == "__main__":
-    print("\n--- INIT ---\n")
+#if __name__ == "__main__":
+#    print("\n--- INIT ---\n")
+#    portHandler, packetHandler = control.connect()
+#    control.setup_motors(portHandler, packetHandler)
+#
+#    # Start circle
+#    draw_circle_motion(portHandler, packetHandler, steps=20)
+#    print("DONE")
 
-    portHandler, packetHandler = control.connect()
-    control.setup_motors(portHandler, packetHandler)
 
-    # Start circle
-    draw_circle_motion(portHandler, packetHandler, steps=20)
 
-    print("DONE")
 
 
 ##### MAIN SINGLE POSITION
@@ -137,3 +185,21 @@ if __name__ == "__main__":
 #    img_id = capture_image(cap, img_id)
 #
 #    print("DONE")
+
+
+
+
+##### MAIN TRAJECTORY 
+
+if __name__ == "__main__":
+    print("\n--- INIT ---\n")
+
+    portHandler, packetHandler = control.connect()
+    control.setup_motors(portHandler, packetHandler)
+    go_home(portHandler, packetHandler, elbow="down")
+
+    x_fixed = 150
+    y_fixed = 0
+    z_values = np.linspace(80, 0, 10)  # sali da Z=100 a Z=150 in 50 step
+
+    follow_vertical_trajectory(portHandler, packetHandler, x_fixed, y_fixed, z_values, elbow="down")

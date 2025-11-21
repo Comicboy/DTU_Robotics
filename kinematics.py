@@ -1,4 +1,5 @@
 import numpy as np
+from control import MOTOR_LIMITS
 
 def calculateMatrix(theta,d,a,alpha):
     A = np.array([[np.cos(theta) , -np.sin(theta)*np.cos(alpha) , np.sin(theta)*np.sin(alpha) , a*np.cos(theta)],
@@ -22,172 +23,114 @@ def forwards_kinematics(theta_1,theta_2,theta_3,theta_4):
     return T_03,T_04,T_05
 
 
-'''
-def inverse_kinematics(phi):
-    # Constants
-    d1 = 0.05
-    a2 = 0.093
-    a3 = 0.093
-    a4 = 0.05
-
-    radius = 0.032
-    p_0c = np.array([0.15, 0, 0.12])
-
-    x_04 = 0.0
-
-    # Assume phi is defined (you need to assign a value, e.g., phi = 30)
-    # phi = 0  # example angle in degrees
-
-    # Compute positions
-    p_04 = p_0c + radius * np.array([0, np.cos(np.deg2rad(phi)), np.sin(np.deg2rad(phi))])
-    o_04 = p_04
-
-    # Geometry calculations
-    d_4z = a4 * x_04
-    u = np.sqrt(a4**2 - d_4z**2)
-
-    theta1 = np.rad2deg(np.arctan2(o_04[1], o_04[0]))
-    x43 = u * np.cos(np.deg2rad(theta1))
-    y43 = u * np.sin(np.deg2rad(theta1))
-
-    xc = o_04[0] - x43
-    yc = o_04[1] - y43
-    zc = o_04[2] - d_4z
-
-    r = np.sqrt(xc**2 + yc**2)
-    s = zc - d1
-
-    c3 = (r**2 + s**2 - a2**2 - a3**2) / (2 * a2 * a3)
-    s3 = np.sqrt(1 - c3**2)  # remember the other solution: -np.sqrt(1 - c3**2)
-    theta3 = np.rad2deg(np.arctan2(s3, c3))
-
-    theta2 = np.rad2deg(np.arctan2(s, r) - np.arctan2(a3 * s3, a2 + a3 * c3))
-
-    alfa = np.rad2deg(np.arcsin(x_04))
-    theta4 = alfa - theta2 - theta3
-
-    q = np.array([theta1, theta2, theta3, theta4])
-    return q
-'''
-
-#def inverseKinematics(x,o):
-#    d4=50
-#    x_c=np.round(o[0]-x[0]*d4,4)
-#    y_c=np.round(o[1]-x[1]*d4,4)
-#    z_c=np.round(o[2]-x[2]*d4,4)
-#    d1=50
-#    #1 = atan2(x_c,y_c);
-#    q0 = np.arctan2(y_c,x_c)
-#    r_sq=x_c**2+y_c**2
-#    s=z_c-d1
-#    c2=np.round((r_sq+s*s-93*93-93*93)/(2*93*93),4)
-#    #print("c2 =", c2)
-#    #q3 = [atan2(c3,sqrt(1-c3^2)) atan2(c3,-sqrt(1-c3^2))];
-#    #print("atans =  ",np.rad2deg(np.atan2(np.sqrt(1-c2*c2),c2)),np.rad2deg(np.atan2(-np.sqrt(1-c2*c2),c2)))
-#    q2 = [np.atan2(np.sqrt(1-c2*c2),c2),np.atan2(-np.sqrt(1-c2*c2),c2)]
-#    #print("q2 =", np.rad2deg(q2))
-#    #q2 = atan2(sqrt(r_sq),s)-atan2(93+93*c3,93*sin(q3(1)));
-#    q1 = [np.atan2(s,np.sqrt(r_sq))-np.atan2(93*np.sin(q2[0]),93+93*c2),np.atan2(s,np.sqrt(r_sq))-np.atan2(93*np.sin(q2[1]),93+93*c2)]
-#    #print("q1 = ", np.rad2deg(q1))
-#    #print("q1 =", np.rad2deg(q1))
-#    #q3 = [np.arctan2(np.round(np.sqrt(1-x[2]**2),4),x[2]), np.atan2(x[1]*d4,x[0]*d4)]
-#    q3 = [np.arctan2(x[2],np.sqrt(x[0]**2+x[1]**2))-q1[0]-q2[0],np.arctan2(x[2],np.sqrt(x[0]**2+x[1]**2))-q1[1]-q2[1]]
-#    #print("q3 = ", np.rad2deg(q3))
-#    #print("q3 = ", np.rad2deg(q3))
-#    #q4 = np.atan2(x(3),np.sqrt(1-x(3)^2))
-#    #q4 = atan2(sqrt(1-x(3)^2),x(3));
-#    #q4 = atan2(sqrt(1-(sin(q1)*x(1)-cos(q1)*x(2))^2),sin(q1)*x(1)-cos(q1)*x(2));
-#    #q4 = atan2(x(2),x(1));
-#    return [q0,q1,q2,q3]
 
 import numpy as np
 
 # Limiti dei servo in gradi
 SERVO_LIMITS_DEG = {
-    1: (-120, 120),
-    2: (-90, 90),
-    3: (-90, 120),
-    4: (-60, 60)
+    1: (60, 240),
+    2: (51, 150),
+    3: (40, 220),
+    4: (135, 240)
 }
 
-def inverseKinematics(x, o):
-    d4 = 50
-    x_c = np.round(o[0] - x[0]*d4, 4)
-    y_c = np.round(o[1] - x[1]*d4, 4)
-    z_c = np.round(o[2] - x[2]*d4, 4)
-    d1 = 50
+def calculate_circle_step(phi):
+    p_c = np.array([150, 0, 120])  # Center of the circle
+    radius = 32  # Radius of the circle
+    rot = np.array([0,np.cos(phi),np.sin(phi)])
+    return p_c + radius * rot
 
-    # Calcolo angoli
-    q0 = np.arctan2(y_c, x_c)
-    r_sq = x_c**2 + y_c**2
-    s = z_c - d1
-
-    c2 = np.round((r_sq + s*s - 93*93 - 93*93) / (2*93*93), 4)
-    q2 = [np.arctan2(np.sqrt(1-c2*c2), c2), np.arctan2(-np.sqrt(1-c2*c2), c2)]
-    q1 = [
-        np.arctan2(s, np.sqrt(r_sq)) - np.arctan2(93*np.sin(q2[0]), 93 + 93*c2),
-        np.arctan2(s, np.sqrt(r_sq)) - np.arctan2(93*np.sin(q2[1]), 93 + 93*c2)
-    ]
-    q3 = [
-        np.arctan2(x[2], np.sqrt(x[0]**2 + x[1]**2)) - q1[0] - q2[0],
-        np.arctan2(x[2], np.sqrt(x[0]**2 + x[1]**2)) - q1[1] - q2[1]
-    ]
-
-    # Converto tutto in gradi per applicare i limiti
-    q0_deg = np.rad2deg(q0)
-    q1_deg = [np.rad2deg(a) for a in q1]
-    q2_deg = [np.rad2deg(a) for a in q2]
-    q3_deg = [np.rad2deg(a) for a in q3]
-
-    # Applica limiti servo
-    def limit(angle_deg, servo_id):
-        min_deg, max_deg = SERVO_LIMITS_DEG[servo_id]
-        if angle_deg < min_deg:
-            return min_deg
-        elif angle_deg > max_deg:
-            return max_deg
-        return angle_deg
-
-    q0_deg = limit(q0_deg, 1)
-    q1_deg = [limit(a, 2) for a in q1_deg]
-    q2_deg = [limit(a, 3) for a in q2_deg]
-    q3_deg = [limit(a, 4) for a in q3_deg]
-
-    # Ritorna in radianti (per compatibilità con set_angles)
-    q0 = np.deg2rad(q0_deg)
-    q1 = [np.deg2rad(a) for a in q1_deg]
-    q2 = [np.deg2rad(a) for a in q2_deg]
-    q3 = [np.deg2rad(a) for a in q3_deg]
-
-    return [q0, q1, q2, q3]
+def limit_angle(angle_deg, servo_id):
+    low, high = SERVO_LIMITS_DEG[servo_id]
+    return min(max(angle_deg, low), high)
 
 
-if __name__ == "__main__":
-    # Test the functions
-    T_03,T_04, T_05 = forwards_kinematics(np.deg2rad(150-150), np.deg2rad(145-58), np.deg2rad(86-133), np.deg2rad(132-245))
-    T_03_1,T_04_1, T_05_1 = forwards_kinematics(np.deg2rad(150-150), np.deg2rad(148-58), np.deg2rad(78-133), np.deg2rad(138-245))
 
-    print("T_05:\n", T_05)
-    print("T_05_1:\n", T_05_1)
 
-    q = inverseKinematics(np.round(T_04[0:3,0],4),np.round(T_04[0:3,3],4))
-
-    #q = inverseKinematics([1,0,0], [150,0,50])
-
-    #print("q_0 = ", np.rad2deg(q[0]), np.rad2deg(q[1][0]), np.rad2deg(q[2][0]), np.rad2deg(q[3][0]))
-    #print("q_1 = ", np.rad2deg(q[0]), np.rad2deg(q[1][1]), np.rad2deg(q[2][1]), np.rad2deg(q[3][1]))
-    T_test,T_test_2,_ = forwards_kinematics(np.round(q[0]), q[1][0], q[2][0], q[3][0])
-    T_test_1,T_test_1_2,_ = forwards_kinematics(q[0], q[1][1], q[2][1], q[3][1])
-
+def inverseKinematics(pos, x_dir_z):
+    """
+    Compute 4-DOF inverse kinematics for a 4R arm.
     
+    Parameters
+    ----------
+    pos : array-like, shape (3,)
+        Desired end-effector position [x, y, z].
+    x_dir_z : float
+        z-component of the end-effector's x-axis (orientation along stylus).
+    
+    Returns
+    -------
+    q_rel : ndarray, shape (4,)
+        Joint angles [q1, q2, q3, q4] in radians relative to servo zero (0=center),
+        preferred elbow-up configuration.
+    """
 
-    #print("DDifference = \n",T_test_2 - T_04)
-    #print("DDifference_1 = \n",T_test_1_2 - T_04)
-    #print("T_04:\n", np.round(T_04,4))
-    #print("T_test_2:\n", np.round(T_test_2,4))
-    #print("T_test_1_2:\n", np.round(T_test_1_2,4))
+    # Robot parameters
+    a2, a3, a4, d1 = 93, 93, 50, 50
+    o_04 = np.array(pos)
+    x_04 = x_dir_z
 
-    #print("T_03:\n", T_test)
-    #print("T_04:\n", T_test_2)
+    # Compute wrist offset
+    d_4z = a4 * x_04
+    u = np.sqrt(a4**2 - d_4z**2)
 
-    #print("Joint angles (degrees):", inverse_kinematics(0))
+    # Base angle (theta1)
+    theta1_deg = np.rad2deg(np.arctan2(o_04[1], o_04[0]))
+
+    # Wrist projection
+    x43 = u * np.cos(np.deg2rad(theta1_deg))
+    y43 = u * np.sin(np.deg2rad(theta1_deg))
+
+    # Wrist center
+    xc = o_04[0] - x43
+    yc = o_04[1] - y43
+    zc = o_04[2] - d_4z
+
+    # Planar distance
+    r = np.sqrt(xc**2 + yc**2)
+    s = zc - d1
+
+    # Elbow angles
+    c3 = (r**2 + s**2 - a2**2 - a3**2) / (2 * a2 * a3)
+    s3_options = [np.sqrt(1 - c3**2), -np.sqrt(1 - c3**2)]  # elbow-up, elbow-down
+
+    theta2_options = [np.rad2deg(np.arctan2(s, r) - np.arctan2(a3*s3, a2 + a3*c3)) for s3 in s3_options]
+    theta3_options = [np.rad2deg(np.arctan2(s3, c3)) for s3 in s3_options]
+    alfa = np.rad2deg(np.arcsin(x_04))
+    theta4_options = [alfa - t2 - t3 for t2, t3 in zip(theta2_options, theta3_options)]
+
+    # Create candidate solutions relative to servo zero
+    def to_relative(theta_deg, servo_id):
+        return theta_deg - MOTOR_LIMITS[servo_id]["deg_zero"]
+
+    solA_rel = [to_relative(theta1_deg, 1),
+                to_relative(theta2_options[0], 2),
+                to_relative(theta3_options[0], 3),
+                to_relative(theta4_options[0], 4)]  # elbow-up
+
+    solB_rel = [to_relative(theta1_deg, 1),
+                to_relative(theta2_options[1], 2),
+                to_relative(theta3_options[1], 3),
+                to_relative(theta4_options[1], 4)]  # elbow-down
+
+    # ------------------ validate with limits (relative) ------------------
+    def is_valid(sol):
+        for i, ang in enumerate(sol, start=1):
+            lo = SERVO_LIMITS_DEG[i][0] - MOTOR_LIMITS[i]["deg_zero"]
+            hi = SERVO_LIMITS_DEG[i][1] - MOTOR_LIMITS[i]["deg_zero"]
+            if not (lo <= ang <= hi):
+                return False
+        return True
+
+    # Prefer elbow-up
+    if is_valid(solA_rel):
+        chosen = solA_rel
+    elif is_valid(solB_rel):
+        chosen = solB_rel
+    else:
+        # Clamp elbow-up if no solution valid
+        chosen = [limit_angle(solA_rel[i], i+1) for i in range(4)]
+
+    # Convert to radians
+    return np.deg2rad(chosen)
+

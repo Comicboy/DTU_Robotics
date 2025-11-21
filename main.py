@@ -4,7 +4,7 @@ import kinematics
 import wait
 from time import sleep
 import control
-
+import couple_movement
 
 
 
@@ -35,7 +35,11 @@ def move_to_position(portHandler, packetHandler, pos):
     print(f"{sol}: {q_deg_int}")
 
     control.set_angles(portHandler, packetHandler, np.deg2rad(q_deg_int))
-    sleep(0.03)
+    sleep(0.5)
+
+    # Legge e stampa gli angoli reali
+    real_angles = couple_movement.get_current_angles(portHandler, packetHandler)
+    print(f"Current angles (from motors): {np.round(real_angles,2)}\n")
     return True
 
 
@@ -43,16 +47,12 @@ def move_to_logical_angles(portHandler, packetHandler, theta_logical_deg):
     theta_logical_rad = np.deg2rad(theta_logical_deg)
 
     _, T04, _ = kinematics.forwards_kinematics(*theta_logical_rad)
-
     q_up, q_down = kinematics.inverseKinematics(T04[:3,0], T04[:3,3], return_both=True)
 
-    valid_up = control.ik_solution_valid(q_up)
-    valid_down = control.ik_solution_valid(q_down)
-
-    if valid_up:
+    if control.ik_solution_valid(q_up):
         q_rad = q_up
         sol = "ELBOW UP"
-    elif valid_down:
+    elif control.ik_solution_valid(q_down):
         q_rad = q_down
         sol = "ELBOW DOWN"
     else:
@@ -62,11 +62,13 @@ def move_to_logical_angles(portHandler, packetHandler, theta_logical_deg):
     q_deg_int = np.round(np.rad2deg(q_rad)).astype(int)
     print(f"IK solution {sol}: {q_deg_int}")
 
-    q_rad_int = np.deg2rad(q_deg_int)
+    control.set_angles(portHandler, packetHandler, np.deg2rad(q_deg_int))
+    sleep(0.5)
 
-    control.set_angles(portHandler, packetHandler, q_rad_int)
+    # Legge e stampa angoli reali
+    real_angles = couple_movement.get_current_angles(portHandler, packetHandler)
+    print(f"Current angles (from motors): {np.round(real_angles,2)}\n")
 
-    sleep(2)
 
 def capture_image(cap, img_id):
     ret, frame = cap.read()
@@ -129,18 +131,10 @@ def follow_vertical_trajectory(portHandler, packetHandler, x_fixed, y_fixed, z_v
 
 
 def go_home(portHandler, packetHandler, elbow="down"):
-    """
-    Porta il braccio nella posizione di HOME.
-    elbow: "up" o "down" per scegliere la configurazione del gomito.
-    """
-    # Definisci la posizione home (puoi modificare questi valori)
-    home_pos = np.array([100, 0, 100])   # X, Y, Z in mm
-    x_dir = np.array([0, 0, -1])         # polso verso il basso
-
-    # Calcola IK
+    home_pos = np.array([100, 0, 100])
+    x_dir = np.array([0, 0, 0])
     q_up, q_down = kinematics.inverseKinematics_position(home_pos, x_dir=x_dir, return_both=True)
 
-    # Scegli la configurazione del gomito
     if elbow.lower() == "up":
         q_target = q_up
         sol_name = "ELBOW UP"
@@ -149,10 +143,24 @@ def go_home(portHandler, packetHandler, elbow="down"):
         sol_name = "ELBOW DOWN"
 
     print(f"Moving to HOME ({sol_name}): {np.round(np.rad2deg(q_target)).astype(int)}")
-
-    # Manda i comandi ai motori
     control.set_angles(portHandler, packetHandler, q_target)
-    sleep(2)  # attendi che il braccio raggiunga la posizione
+    sleep(1.5)
+
+    # Stampa angoli reali
+    real_angles = couple_movement.get_current_angles(portHandler, packetHandler)
+    print(f"Current angles at HOME: {np.round(real_angles,2)}\n")
+
+    ticks, real_abs = couple_movement.get_current_absolute_angles(portHandler, packetHandler)
+    print(f"Ticks: {ticks}")
+    print(f"Absolute angles: {np.round(real_abs,2)}\n")
+
+
+
+
+
+
+
+# ------------------------ MAIN ------------------------------####
 
 
 ###### MAIN CIRCLE
@@ -171,35 +179,38 @@ def go_home(portHandler, packetHandler, elbow="down"):
 
 ##### MAIN SINGLE POSITION
 
-#if __name__ == "__main__":
-#    img_id = 0
-#
-#    print_angle_legend()
-#
-#    cap = cv2.VideoCapture(1)
-#    portHandler, packetHandler = control.connect()
-#    control.setup_motors(portHandler, packetHandler)
-#
-#    theta_logical_0 = [20, 50, 30, 0]
-#    move_to_logical_angles(portHandler, packetHandler, theta_logical_0)
-#    img_id = capture_image(cap, img_id)
-#
-#    print("DONE")
+if __name__ == "__main__":
+    img_id = 0
+
+    print_angle_legend()
+
+    cap = cv2.VideoCapture(1)
+    portHandler, packetHandler = control.connect()
+    control.setup_motors(portHandler, packetHandler)
+
+    
+    theta_logical_0 = [20, 10, 30, 0]
+    move_to_logical_angles(portHandler, packetHandler, theta_logical_0)
+
+    
+
+    print("DONE")
+
 
 
 
 
 ##### MAIN TRAJECTORY 
 
-if __name__ == "__main__":
-    print("\n--- INIT ---\n")
-
-    portHandler, packetHandler = control.connect()
-    control.setup_motors(portHandler, packetHandler)
-    go_home(portHandler, packetHandler, elbow="down")
-
-    x_fixed = 150
-    y_fixed = 0
-    z_values = np.linspace(80, 0, 10)  # sali da Z=100 a Z=150 in 50 step
-
-    follow_vertical_trajectory(portHandler, packetHandler, x_fixed, y_fixed, z_values, elbow="down")
+#if __name__ == "__main__":
+#    print("\n--- INIT ---\n")
+#
+#    portHandler, packetHandler = control.connect()
+#    control.setup_motors(portHandler, packetHandler)
+#    go_home(portHandler, packetHandler, elbow="down")
+#
+#    x_fixed = 150
+#    y_fixed = 0
+#    z_values = np.linspace(100, 10, 10)  # sali da Z=100 a Z=150 in 50 step
+#
+#    follow_vertical_trajectory(portHandler, packetHandler, x_fixed, y_fixed, z_values, elbow="down")

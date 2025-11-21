@@ -23,16 +23,16 @@ DXL_IDS = [1,2,3,4]
 MOTOR_LIMITS = {
     1: {"deg_min": 60,  "deg_zero": 150, "deg_max": 240,
         "tick_min": 204, "tick_zero": 512, "tick_max": 820},
-    2: {"deg_min": 51,  "deg_zero": 60,  "deg_max": 150,
+    2: {"deg_min": 51,  "deg_zero": 60,  "deg_max": 150,  
         "tick_min": 175, "tick_zero": 204, "tick_max": 512},
-    3: {"deg_min": 40,  "deg_zero": 130, "deg_max": 220,
-        "tick_min": 140, "tick_zero": 450, "tick_max": 750},
+    3: {"deg_min": 60,  "deg_zero": 150, "deg_max": 240,   #robot 4 deg_zero = 130, robot 6 deg_zero = 150, also min and max change
+        "tick_min": 204, "tick_zero": 512, "tick_max": 820},
     4: {"deg_min": 135, "deg_zero": 150, "deg_max": 240,
         "tick_min": 460, "tick_zero": 512, "tick_max": 820},
 }
 
 # ----------------------------- CONNECTION -----------------------------
-def connect(port="COM3"):
+def connect(port="COM4"):
     portHandler = dxl.PortHandler(port)
     packetHandler = dxl.PacketHandler(PROTOCOL_VERSION)
 
@@ -58,7 +58,7 @@ def connect(port="COM3"):
 def setup_motors(portHandler, packetHandler):
     for ID in DXL_IDS:
         packetHandler.write1ByteTxRx(portHandler, ID, ADDR_MX_TORQUE_ENABLE, TORQUE_ENABLE)
-        packetHandler.write1ByteTxRx(portHandler, ID, ADDR_MX_MOVING_SPEED, 15)
+        packetHandler.write1ByteTxRx(portHandler, ID, ADDR_MX_MOVING_SPEED, 25)
 
 # ----------------------------- DEG → TICKS -----------------------------
 def deg2dxl(servo, deg_relative):

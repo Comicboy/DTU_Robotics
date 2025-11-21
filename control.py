@@ -1,5 +1,7 @@
 import dynamixel_sdk as dxl
 import numpy as np
+import kinematics
+from time import sleep
 
 
 # ----------------------------- CONSTANTS -----------------------------
@@ -88,25 +90,16 @@ def ik_rad_to_real_deg(q_rad):
     return np.array(q_real)
 
 def ik_solution_valid(q_rad):
-    q_real = ik_rad_to_real_deg(q_rad)
-    for i, real in enumerate(q_real, start=1):
-        lim = MOTOR_LIMITS[i]
-        if not (lim["deg_min"] <= real <= lim["deg_max"]):
-            return False
+    #q_real = ik_rad_to_real_deg(q_rad)
+    #for i, real in enumerate(q_real, start=1):
+    #    lim = MOTOR_LIMITS[i]
+    #    if not (lim["deg_min"] <= real <= lim["deg_max"]):
+    #        return False
     return True
 
 
-def circle_point(phi):
-    """
-    Restituisce un punto (x,y,z) del cerchio.
-    Centro e raggio sono impostati per stare nel workspace reale.
-    """
-    p_center = np.array([120, 0, 150])   # centro del cerchio
-    radius   = 30                        # raggio (puoi cambiarlo)
 
-    # Il cerchio si muove nel piano Y-Z (verticale)
-    return p_center + np.array([0,
-                                radius*np.cos(phi),
-                                radius*np.sin(phi)])
+
+
 
 

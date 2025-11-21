@@ -78,19 +78,33 @@ def capture_image(cap, img_id):
     return img_id + 1
 
 
-def draw_circle_motion(portHandler, packetHandler, steps=50):
-    print("\n--- Drawing circular trajectory ---")
+def draw_circle_motion(portHandler, packetHandler, steps=5, z_fixed=50): ##### don't go down z = 50 , really low
+    """
+    Muove il braccio lungo un cerchio orizzontale nel piano X-Y
+    mantenendo Z fisso.
+    """
+    print("\n--- Drawing circular trajectory (Z fixed) ---")
+    
+    # Parametri cerchio
+    p_center = np.array([150, 0, z_fixed])  # centro del cerchio
+    radius = 20                              # raggio del cerchio
 
     for i in range(steps):
         phi = 2*np.pi * (i / steps)
-        pos = control.circle_point(phi)
+        # punto del cerchio con Z fisso
+        pos = p_center + radius * np.array([np.cos(phi), np.sin(phi), 0])
+        
+        # calcolo IK (ritorna [Elbow Up, Elbow Down])
+        q_up, q_down = kinematics.inverseKinematics_position(pos, return_both=True)
+        
+        # invia direttamente la soluzione Elbow Down
+        control.set_angles(portHandler, packetHandler, q_down)
 
-        ok = move_to_position(portHandler, packetHandler, pos)
-        if not ok:
-            print("Stopping – unreachable point.\n")
-            break
+        sleep(0.07)  # pausa tra step per dare tempo al braccio di muoversi
 
     print("--- Circle finished ---\n")
+
+
 
 
 
@@ -102,7 +116,7 @@ if __name__ == "__main__":
     control.setup_motors(portHandler, packetHandler)
 
     # Start circle
-    draw_circle_motion(portHandler, packetHandler, steps=250)
+    draw_circle_motion(portHandler, packetHandler, steps=20)
 
     print("DONE")
 

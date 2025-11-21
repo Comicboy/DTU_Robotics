@@ -66,7 +66,7 @@ def inverseKinematics(x, o, return_both=False):
     return np.array([q0, q1_up, q2_up, q3_up])
 
 
-def inverseKinematics_position(pos, x_dir=np.array([0,0,-1]), return_both=False):
+def inverseKinematics_position(pos, x_dir=np.array([0,0,0]), return_both=False):
     q_up, q_down = inverseKinematics(x_dir, pos, return_both=True)
     if return_both:
         return q_up, q_down

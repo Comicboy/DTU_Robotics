@@ -1,6 +1,7 @@
 import dynamixel_sdk as dxl
 import numpy as np
 
+
 # ----------------------------- CONSTANTS -----------------------------
 ADDR_MX_TORQUE_ENABLE = 24
 ADDR_MX_CW_COMPLIANCE_MARGIN = 26
@@ -16,6 +17,7 @@ TORQUE_ENABLE = 1
 
 DXL_IDS = [1,2,3,4]
 
+# ----------------------------- MOTOR LIMITS -----------------------------
 MOTOR_LIMITS = {
     1: {"deg_min": 60,  "deg_zero": 150, "deg_max": 240,
         "tick_min": 204, "tick_zero": 512, "tick_max": 820},
@@ -41,7 +43,6 @@ def connect(port="COM3"):
 
     print("[INFO] Port OK")
 
-    # Ping motors
     for ID in DXL_IDS:
         print(f"[INFO] Pinging motor {ID}...")
         model, comm, error = packetHandler.ping(portHandler, ID)
@@ -55,19 +56,15 @@ def connect(port="COM3"):
 def setup_motors(portHandler, packetHandler):
     for ID in DXL_IDS:
         packetHandler.write1ByteTxRx(portHandler, ID, ADDR_MX_TORQUE_ENABLE, TORQUE_ENABLE)
-        packetHandler.write1ByteTxRx(portHandler, ID, ADDR_MX_MOVING_SPEED, 20)
+        packetHandler.write1ByteTxRx(portHandler, ID, ADDR_MX_MOVING_SPEED, 15)
 
-# ----------------------------- DEG to TICKS -----------------------------
-def deg2dxl(servo, deg_zero_relative):
+# ----------------------------- DEG → TICKS -----------------------------
+def deg2dxl(servo, deg_relative):
     lim = MOTOR_LIMITS[servo]
 
-    # Converto da angolo relativo a angolo assoluto
-    deg_absolute = deg_zero_relative + lim["deg_zero"]
-
-    # Clamp sui limiti assoluti
+    deg_absolute = deg_relative + lim["deg_zero"]
     deg_absolute = max(lim["deg_min"], min(lim["deg_max"], deg_absolute))
 
-    # Linear mapping gradi -> tick
     tick = lim["tick_min"] + (deg_absolute - lim["deg_min"]) * \
            (lim["tick_max"] - lim["tick_min"]) / (lim["deg_max"] - lim["deg_min"])
     return int(round(tick))
@@ -76,21 +73,40 @@ def deg2dxl(servo, deg_zero_relative):
 def set_angles(portHandler, packetHandler, q_rad):
     for i, angle in enumerate(q_rad):
         servo = i + 1
-        deg_relative = np.rad2deg(angle)  # angolo rispetto a zero
-        tick = deg2dxl(servo, deg_relative)
+        
+        deg_rel = np.rad2deg(angle)
+        tick = deg2dxl(servo, deg_rel)
         packetHandler.write2ByteTxRx(portHandler, servo, ADDR_MX_GOAL_POSITION, tick)
 
-def logical_to_motor_angles(theta_logical):
-    """
-    Converte angoli logici in angoli motori assoluti (deg_real) da usare nella FK.
-    theta_logical: lista di angoli in gradi relativi a zero centro ([-range, 0, +range])
-    ritorna: lista di angoli in gradi assoluti compatibili con FK
-    """
-    motor_angles = []
-    for i, th in enumerate(theta_logical, start=1):
+# ----------------------------- IK UTILS -----------------------------
+def ik_rad_to_real_deg(q_rad):
+    q_deg = np.rad2deg(q_rad)
+    q_real = []
+    for i, deg_rel in enumerate(q_deg, start=1):
         lim = MOTOR_LIMITS[i]
-        deg_real = th + lim["deg_zero"]
-        # Clamp ai limiti fisici del servo
-        deg_real = max(lim["deg_min"], min(lim["deg_max"], deg_real))
-        motor_angles.append(deg_real)
-    return motor_angles
+        q_real.append(deg_rel + lim["deg_zero"])
+    return np.array(q_real)
+
+def ik_solution_valid(q_rad):
+    q_real = ik_rad_to_real_deg(q_rad)
+    for i, real in enumerate(q_real, start=1):
+        lim = MOTOR_LIMITS[i]
+        if not (lim["deg_min"] <= real <= lim["deg_max"]):
+            return False
+    return True
+
+
+def circle_point(phi):
+    """
+    Restituisce un punto (x,y,z) del cerchio.
+    Centro e raggio sono impostati per stare nel workspace reale.
+    """
+    p_center = np.array([120, 0, 150])   # centro del cerchio
+    radius   = 30                        # raggio (puoi cambiarlo)
+
+    # Il cerchio si muove nel piano Y-Z (verticale)
+    return p_center + np.array([0,
+                                radius*np.cos(phi),
+                                radius*np.sin(phi)])
+
+

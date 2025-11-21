@@ -5,51 +5,68 @@ import wait
 from time import sleep
 import control
 
+
+
+
 def print_angle_legend():
-    """
-    Mostra intervalli relativi allo zero di ciascun servo.
-    """
     print("\n--- Servo Angle Legend (relative to zero) ---")
     for servo_id, lim in control.MOTOR_LIMITS.items():
-        deg_min_rel = lim["deg_min"] - lim["deg_zero"]
-        deg_max_rel = lim["deg_max"] - lim["deg_zero"]
-        print(f"Servo {servo_id}: {deg_min_rel:+.1f}   0   {deg_max_rel:+.1f}")
+        print(f"Servo {servo_id}: {lim['deg_min']-lim['deg_zero']:+.1f}   0   {lim['deg_max']-lim['deg_zero']:+.1f}")
     print("---------------------------------------------\n")
 
+
+def move_to_position(portHandler, packetHandler, pos):
+    q_up, q_down = kinematics.inverseKinematics_position(pos, return_both=True)
+
+    valid_up = control.ik_solution_valid(q_up)
+    valid_down = control.ik_solution_valid(q_down)
+
+    if valid_up:
+        q_rad = q_up
+        sol = "ELBOW UP"
+    elif valid_down:
+        q_rad = q_down
+        sol = "ELBOW DOWN"
+    else:
+        print("IK failed for:", pos)
+        return False
+
+    q_deg_int = np.round(np.rad2deg(q_rad)).astype(int)
+    print(f"{sol}: {q_deg_int}")
+
+    control.set_angles(portHandler, packetHandler, np.deg2rad(q_deg_int))
+    sleep(0.03)
+    return True
+
+
 def move_to_logical_angles(portHandler, packetHandler, theta_logical_deg):
-    """
-    Muove il robot a angoli logici (deg) usando FK -> IK -> servo.
-    """
-    # Converti in radianti per FK
     theta_logical_rad = np.deg2rad(theta_logical_deg)
 
-    # FK
-    T03, T04, T05 = kinematics.forwards_kinematics(*theta_logical_rad)
+    _, T04, _ = kinematics.forwards_kinematics(*theta_logical_rad)
 
-    # IK usando la nuova funzione combinata
-    q_rad_all = kinematics.inverseKinematics(T04[:3, 0], T04[:3,3])
+    q_up, q_down = kinematics.inverseKinematics(T04[:3,0], T04[:3,3], return_both=True)
 
-    # Scegli la soluzione "elbow-up" (primo elemento di ogni lista dove presente)
-    q_rad = [
-        q_rad_all[0],               # q0
-        q_rad_all[1][0],            # q1
-        q_rad_all[2][0],            # q2
-        q_rad_all[3][0]             # q3
-    ]
+    valid_up = control.ik_solution_valid(q_up)
+    valid_down = control.ik_solution_valid(q_down)
 
-    # Converti in gradi interi
+    if valid_up:
+        q_rad = q_up
+        sol = "ELBOW UP"
+    elif valid_down:
+        q_rad = q_down
+        sol = "ELBOW DOWN"
+    else:
+        print("\n IK ERROR: both solutions out of servo limits\n")
+        return
+
     q_deg_int = np.round(np.rad2deg(q_rad)).astype(int)
-    print("IK returned angles (deg, rounded):", q_deg_int)
+    print(f"IK solution {sol}: {q_deg_int}")
 
-    # Riconverti in radianti per la funzione di controllo
     q_rad_int = np.deg2rad(q_deg_int)
 
-    # Manda ai motori
     control.set_angles(portHandler, packetHandler, q_rad_int)
 
-    # Aspetta che si fermi un po’ (puoi aumentare sleep se il timeout persiste)
-    sleep(3)
-
+    sleep(2)
 
 def capture_image(cap, img_id):
     ret, frame = cap.read()
@@ -60,25 +77,49 @@ def capture_image(cap, img_id):
     print("Saved", fname)
     return img_id + 1
 
+
+def draw_circle_motion(portHandler, packetHandler, steps=50):
+    print("\n--- Drawing circular trajectory ---")
+
+    for i in range(steps):
+        phi = 2*np.pi * (i / steps)
+        pos = control.circle_point(phi)
+
+        ok = move_to_position(portHandler, packetHandler, pos)
+        if not ok:
+            print("Stopping – unreachable point.\n")
+            break
+
+    print("--- Circle finished ---\n")
+
+
+
+###### MAIN CIRCLE
 if __name__ == "__main__":
-    img_id = 0
+    print("\n--- INIT ---\n")
 
-    # ------------------ Stampa limiti ------------------
-    print_angle_legend()
-
-    # ------------------ Init ------------------
-    cap = cv2.VideoCapture(1)
     portHandler, packetHandler = control.connect()
     control.setup_motors(portHandler, packetHandler)
 
-    # ------------------ Prima posizione ------------------
-    theta_logical_0 = [20, -90, 30, 0]  # gradi logici
-    move_to_logical_angles(portHandler, packetHandler, theta_logical_0)
-    img_id = capture_image(cap, img_id)
-
-    # ------------------ Seconda posizione ------------------
-    theta_logical_1 = [0, 70, -20, 0]
-    move_to_logical_angles(portHandler, packetHandler, theta_logical_1)
-    img_id = capture_image(cap, img_id)
+    # Start circle
+    draw_circle_motion(portHandler, packetHandler, steps=250)
 
     print("DONE")
+
+
+##### MAIN SINGLE POSITION
+
+#if __name__ == "__main__":
+#    img_id = 0
+#
+#    print_angle_legend()
+#
+#    cap = cv2.VideoCapture(1)
+#    portHandler, packetHandler = control.connect()
+#    control.setup_motors(portHandler, packetHandler)
+#
+#    theta_logical_0 = [20, 50, 30, 0]
+#    move_to_logical_angles(portHandler, packetHandler, theta_logical_0)
+#    img_id = capture_image(cap, img_id)
+#
+#    print("DONE")

@@ -1,0 +1,27 @@
+Motor limits 
+
+---- MIN ----------------------------------- ZERO ---------------------------------- MAX---------
+
+
+motor 1:
+
+60 degree : 204 tck  			150 degree : 512 tck 			240 degree : 820tck 
+
+
+motor 2:
+
+51 degree : 175 tck  			60 degree : 204 tck 			150 degree : 512 tck 
+
+
+motor 3:
+
+40 degree : 140 tck  			130 degree : 450 tck 			220 degree : 750 tck 
+
+
+motor 4:
+
+135 degree : 460 tck  			150 degree : 512 tck 			 240 degree : 820tck
+
+
+
+

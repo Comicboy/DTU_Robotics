@@ -1,5 +1,5 @@
 import dynamixel_sdk as dxl
-import kinematics
+import kinematics_jonas
 import numpy as np
 from time import sleep
 
@@ -101,8 +101,8 @@ if __name__ == "__main__":
     # Test the functions
     cap = cv2.VideoCapture(2)
     portHandler, packetHandler = setup_motors()
-    T_03,T_04, T_05 = kinematics.forwards_kinematics(np.deg2rad(150-150), np.deg2rad(150-58), np.deg2rad(70-150), np.deg2rad(75-150))
-    q = kinematics.inverseKinematics(T_04[0:3,0],T_04[0:3,3])
+    T_03,T_04, T_05 = kinematics_jonas.forwards_kinematics(np.deg2rad(150-150), np.deg2rad(150-58), np.deg2rad(70-150), np.deg2rad(75-150))
+    q = kinematics_jonas.inverseKinematics(T_04[0:3,0],T_04[0:3,3])
     #rot_tras([np.array([1,2,3])])
     #q = kinematics.inverseKinematics([1,0,0], [50,0,236])
     print(np.rad2deg([q[0],q[1][1],q[2][1],q[3][1]]))
@@ -121,8 +121,8 @@ if __name__ == "__main__":
     print("Saved", filename)
     img_id += 1
     sleep(1)
-    T_03_1,T_04_1, T_05_1 = kinematics.forwards_kinematics(np.deg2rad(100-150), np.deg2rad(148-58), np.deg2rad(70-150), np.deg2rad(80-150))
-    q_1 = kinematics.inverseKinematics(T_04_1[0:3,0],T_04_1[0:3,3])
+    T_03_1,T_04_1, T_05_1 = kinematics_jonas.forwards_kinematics(np.deg2rad(100-150), np.deg2rad(148-58), np.deg2rad(70-150), np.deg2rad(80-150))
+    q_1 = kinematics_jonas.inverseKinematics(T_04_1[0:3,0],T_04_1[0:3,3])
     set_angles([q_1[0],q_1[1][1],q_1[2][1],q_1[3][1]])
     wait.wait_until_stopped(packetHandler, portHandler,
         ids=DXL_IDS,

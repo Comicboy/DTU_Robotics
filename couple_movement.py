@@ -2,7 +2,7 @@ import numpy as np
 import kinematics
 import control
 from time import sleep
-import main
+
 
 
 def get_relative_transform(T1, T2):

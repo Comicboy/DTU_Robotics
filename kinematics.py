@@ -37,7 +37,7 @@ def forwards_kinematics(theta_1, theta_2, theta_3, theta_4):
     T_01 = calculateMatrix(theta_1, 50, 0, np.pi/2)
     T_12 = calculateMatrix(theta_2, 0, 93, 0)
     T_23 = calculateMatrix(theta_3, 0, 93, 0)
-    T_34 = calculateMatrix(theta_4, 0, 50, 0)
+    T_34 = calculateMatrix(theta_4, 0, 76, 0)  #added real ee
 
     # Transformation up to joint 3 and 4
     T_03 = T_01 @ T_12 @ T_23

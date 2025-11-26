@@ -2,13 +2,13 @@
 # Copy this to call function:
 #   from press_key import press_key
 #   press_key(
-#       q=[q0, q1, q2, q3],          # current joint angles [rad]
-#       set_angles_fn=set_angles,    # typically control.set_angles
+#       q=[q0, q1, q2, q3],          # current joint angles [deg]
+#       set_angles_fn=lambda q_rad: control.set_angles(portHandler, packetHandler, q_rad),
 #       packetHandler=packetHandler,
 #       portHandler=portHandler,
 #       dxl_ids=DXL_IDS,
 #       addr_moving_speed=ADDR_MX_MOVING_SPEED,
-#       press_joint_index=2,         # 2 -> q3, 3 -> q4
+#       press_joint_index=2,         # 2 -> q3, 3 -> q4  (0-based index)
 #       press_delta_deg=5.0,
 #       speed=80
 #   )
@@ -31,7 +31,7 @@ def set_all_speeds(packetHandler, portHandler, dxl_ids, addr_moving_speed, speed
 
 def press_key(
     q,
-    set_angles_fn,               # e.g. control.set_angles
+    set_angles_fn,               # e.g. lambda q_rad: control.set_angles(portHandler, packetHandler, q_rad)
     packetHandler=None,
     portHandler=None,
     dxl_ids=None,
@@ -43,8 +43,9 @@ def press_key(
     release_wait=0.2             # wait after releasing
 ):
     """
-    q: list/array [q0, q1, q2, q3] in radians – the pose you are ALREADY at.
-    set_angles_fn: function to send joint angles to the robot (e.g. control.set_angles)
+    q: list/array [q0, q1, q2, q3] in DEGREES – the pose you are ALREADY at.
+    set_angles_fn: function to send joint angles in RADIANS to the robot
+                   (e.g. lambda q_rad: control.set_angles(portHandler, packetHandler, q_rad))
 
     If 'speed' is not None, you must also pass:
       - packetHandler, portHandler, dxl_ids, addr_moving_speed
@@ -57,15 +58,19 @@ def press_key(
             raise ValueError("To change speed, provide packetHandler, portHandler, dxl_ids, addr_moving_speed")
         set_all_speeds(packetHandler, portHandler, dxl_ids, addr_moving_speed, speed)
 
-    base_q = list(q)  # copy of the current joint angles
+    # Work in degrees externally
+    base_q_deg = list(map(float, q))  # copy of the current joint angles in deg
 
-    # 1) Press down: modify only the selected joint, in radians
-    press_q = base_q.copy()
-    press_q[press_joint_index] -= np.deg2rad(press_delta_deg)
+    # 1) Press down: modify only the selected joint, in degrees
+    press_q_deg = base_q_deg.copy()
+    press_q_deg[press_joint_index] -= press_delta_deg
 
-    set_angles_fn(press_q)
+    # Convert to radians before sending to motors
+    press_q_rad = np.deg2rad(press_q_deg)
+    set_angles_fn(press_q_rad)
     time.sleep(press_wait)
 
-    # 2) Release: go back to the original pose
-    set_angles_fn(base_q)
+    # 2) Release: go back to the original pose (also convert to radians)
+    base_q_rad = np.deg2rad(base_q_deg)
+    set_angles_fn(base_q_rad)
     time.sleep(release_wait)

@@ -7,7 +7,13 @@ import math
 import statistics
 import shlex
 from PIL import Image
-from google.colab.patches import cv2_imshow
+
+# Check if running in Colab for display, otherwise handle standard OpenCV
+try:
+    from google.colab.patches import cv2_imshow
+except ImportError:
+    def cv2_imshow(img):
+        cv2.imshow("Preview", img)
 
 # --- CONFIGURATION ---
 VALID_KEY_CHARS = list("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789`~!@#$%^&*()-_=+[]{}\\|;:'\",.<>/?")
@@ -29,17 +35,6 @@ QWERTY_LETTERS = [
     ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'],
     ['Z', 'X', 'C', 'V', 'B', 'N', 'M']
 ]
-
-# --- IMAGE HANDLING ---
-def load_and_resize(path, max_w=1280):
-    img = cv2.imread(path)
-    if img is None:
-        raise FileNotFoundError(f"Couldn't read image: {path}")
-    h, w = img.shape[:2]
-    if w > max_w:
-        scale = max_w / w
-        img = cv2.resize(img, (int(w * scale), int(h * scale)))
-    return img
 
 # --- PREPROCESSING: build adaptive mask and edge mask, then union ---
 def build_masks(img, block_size=21, C=5):
@@ -237,7 +232,7 @@ def map_rows_to_layout(results, qwerty_layout):
         used_layout.add(lr_best)
     return row_map
 
-# --- QWERTY CORRECTION (adaptive for partial rows) ---
+# --- QWERTY CORRECTION ---
 def correct_labels_by_qwerty(results, qwerty_layout, min_row_len=5, match_thresh=0.6):
     idxs = [i for i, r in enumerate(results) if r.get("bbox")]
     if not idxs:
@@ -283,7 +278,6 @@ def correct_labels_by_qwerty(results, qwerty_layout, min_row_len=5, match_thresh
                 results[res_idx] = row_keys_sorted[i]
     return results
 
-# --- ROW-AWARE AMBIGUITY FIX (convert number-row 'O' to '0') ---
 def fix_ambiguous_by_row(results):
     rows, _, _ = build_detected_rows(results)
     if not rows:
@@ -298,7 +292,6 @@ def fix_ambiguous_by_row(results):
             results[res_idx]["label"] = '0'
     return results
 
-# --- DUPLICATE LABEL RESOLUTION (demote losers to '?', prefer expected row; for digits, prefer top-most) ---
 def resolve_duplicate_labels(results, qwerty_layout):
     label_pos = {lbl: (ri, ci) for ri, row in enumerate(qwerty_layout) for ci, lbl in enumerate(row)}
     idxs = [i for i, r in enumerate(results) if r.get("bbox") and r.get("label") and r["label"] != "?"]
@@ -392,7 +385,6 @@ def resolve_duplicate_labels(results, qwerty_layout):
                 results[j]["label"] = "?"
     return results
 
-# --- FILL MISSING KEYS BY LAYOUT GAPS (updated per-row version) ---
 def fill_missing_by_layout(results, qwerty_layout):
     rows, _, _ = build_detected_rows(results)
     if not rows:
@@ -434,7 +426,6 @@ def fill_missing_by_layout(results, qwerty_layout):
                 assign_between_row(row_indices, left_lbl, right_lbl, lbl)
     return results
 
-# --- FINAL NEIGHBOR-ONLY GAP FILL (no row mapping) ---
 def fill_missing_by_neighbors_no_map(results, qwerty_layout):
     rows, _, _ = build_detected_rows(results)
     if not rows:
@@ -467,7 +458,6 @@ def fill_missing_by_neighbors_no_map(results, qwerty_layout):
                 results[chosen]["inferred"] = True
     return results
 
-# --- SPACEBAR LABELING BASED ON 'B' KEY POSITION AND WIDTH ---
 def label_spacebar_by_B(results, width_factor=3.0, dx_thresh_factor=1.0, dy_thresh_factor=0.6):
     B_key = next((r for r in results if r.get("bbox") and r.get("label") == "B"), None)
     if B_key is None:
@@ -512,7 +502,6 @@ def label_spacebar_by_B(results, width_factor=3.0, dx_thresh_factor=1.0, dy_thre
     results[best_idx]["inferred"] = False
     return results
 
-# --- SPACEBAR HEURISTICS (optional center marker) ---
 def get_space_center(results, offset_factor=1.25):
     reference_key = None
     for key in ["B", "V", "N"]:
@@ -563,7 +552,6 @@ def detect_spacebar(results):
         return {"label": "SPACE", "bbox": None, "center": sc, "inferred": True}
     return None
 
-# --- LAYOUT SELECTION FOR PARTIAL IMAGES ---
 def select_layout_and_params(raw_results):
     digits_count = sum(1 for r in raw_results if r["label"] in DIGITS)
     letters_count = sum(1 for r in raw_results if r["label"] in LETTERS)
@@ -572,9 +560,16 @@ def select_layout_and_params(raw_results):
     min_row_len = 3 if letters_only else 5
     return layout, letters_only, min_row_len
 
-# --- MAIN DETECTION PIPELINE ---
-def detect_keyboard_keys(image_path, verbose=False, save_debug=True, include_unlabeled=True):
-    img = load_and_resize(image_path)
+###########################################################
+# KEY MODIFICATION HERE:
+# 1. Accepts 'img' (Numpy Array) instead of filepath
+# 2. Does NOT resize the image (maintains stereo coords)
+###########################################################
+def detect_keyboard_keys(img, verbose=False, save_debug=True, include_unlabeled=True):
+    
+    # img is now passed directly. We skip loading and resizing.
+    # This ensures (u, v) coordinates match the Disparity Map from the Stereo Pipeline.
+    
     gray, mask_adaptive, mask_edges, mask_union = build_masks(img, block_size=21, C=5)
     contours = find_key_contours(mask_union, img.shape)
     if len(contours) < 10:
@@ -659,16 +654,31 @@ def detect_keyboard_keys(image_path, verbose=False, save_debug=True, include_unl
 def main():
     script_dir = os.getcwd()
     image_path = os.path.join(script_dir, "keyboard_image_partial.jpg")
+    
     if not os.path.exists(image_path):
         print(f"Error: keyboard_image.jpg not found in {script_dir}")
         return
+        
     print(f"Processing: {image_path}")
-    annotated, results = detect_keyboard_keys(image_path, verbose=True, save_debug=True, include_unlabeled=True)
+    
+    # Load image manually here for testing purposes
+    # Since we removed resizing from the detection function, 
+    # we simulate the raw input here.
+    img = cv2.imread(image_path)
+    
+    if img is None:
+        print("Failed to load image.")
+        return
+
+    # Pass the numpy array (img) directly
+    annotated, results = detect_keyboard_keys(img, verbose=True, save_debug=True, include_unlabeled=True)
+    
     out_path = os.path.join(script_dir, "annotated_keyboard_image.jpg")
     cv2.imwrite(out_path, annotated)
     print(f"\nAnnotated image saved to: {out_path}")
     print("\nDetected keys (JSON):")
     print(json.dumps(results, indent=2))
+    
     cv2_imshow(annotated)
     cv2.waitKey(0)
     cv2.destroyAllWindows()

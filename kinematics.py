@@ -56,7 +56,69 @@ def forwards_kinematics(theta_1, theta_2, theta_3, theta_4):
     return T_03, T_04, T_05
 
 
-def inverseKinematics(x_dir, o, return_both=False):
+import numpy as np
+
+def inverseKinematics(o):
+    """
+    Compute IK for 4-DOF manipulator (elbow-up and elbow-down).
+
+    Args:
+        x : array-like, desired end-effector orientation vector [x_dir_x, x_dir_y, x_dir_z]
+        o : array-like, desired end-effector position [x, y, z]
+        return_both : bool, if True returns both configurations; else returns elbow-up only
+
+    Returns:
+        If return_both=True:
+            (q_up, q_down) : tuple of 4-element arrays (radians)
+        Else:
+            q_up : 4-element array (elbow-up) in radians
+    """
+    d4 = 76
+    d1 = 50
+    a2 = 93
+    a3 = 93
+
+    x = [0,0,-1]
+    # Wrist center
+    x_c = o[0] - x[0]*d4
+    y_c = o[1] - x[1]*d4
+    z_c = o[2] - x[2]*d4
+
+    # Base rotation
+    q0 = np.arctan2(y_c, x_c)
+
+    # Distances in plane
+    r_sq = x_c**2 + y_c**2
+    s = z_c - d1
+
+    # Law of cosines for q2
+    c2 = (r_sq + s**2 - a2**2 - a3**2)/(2*a2*a3)
+    c2 = np.clip(c2, -1, 1)  # numerical safety
+
+    s2_up = np.sqrt(1 - c2**2)
+    s2_down = -s2_up
+
+    # q2 for both configurations
+    q2_up = np.arctan2(s2_up, c2)
+    q2_down = np.arctan2(s2_down, c2)
+
+    # q1 for both configurations
+    q1_up = np.arctan2(s, np.sqrt(r_sq)) - np.arctan2(a3*s2_up, a2 + a3*c2)
+    q1_down = np.arctan2(s, np.sqrt(r_sq)) - np.arctan2(a3*s2_down, a2 + a3*c2)
+
+    # q3 (wrist) for both
+    q3_up = np.arctan2(x[2], np.sqrt(x[0]**2 + x[1]**2)) - q1_up - q2_up
+    q3_down = np.arctan2(x[2], np.sqrt(x[0]**2 + x[1]**2)) - q1_down - q2_down
+
+    q_up = np.array([q0, q1_up, q2_up, q3_up])
+    q_down = np.array([q0, q1_down, q2_down, q3_down])
+
+    return q_down
+
+
+
+
+def inverseKinematics_correct(x_dir, o, return_both=False):
     """
     Compute inverse kinematics for a 4-DOF manipulator.
     
@@ -103,31 +165,32 @@ def inverseKinematics(x_dir, o, return_both=False):
     # Compute wrist joint angle based on desired x_dir
     q3_up   = np.arctan2(x_dir[2], np.sqrt(x_dir[0]**2 + x_dir[1]**2)) - q1_up - q2_up
     q3_down = np.arctan2(x_dir[2], np.sqrt(x_dir[0]**2 + x_dir[1]**2)) - q1_down - q2_down
+    
 
-    if return_both:
-        return np.array([q0, q1_down, q2_down, q3_down]), np.array([q0, q1_up, q2_up, q3_up])
+    #if return_both:
+    #    return np.array([q0, q1_down, q2_down, q3_down]), np.array([q0, q1_up, q2_up, q3_up])
 
     return np.array([q0, q1_up, q2_up, q3_up])
 
 
-def inverseKinematics_position(pos, x_dir=np.array([0,0,-1]), return_both=False):
-    """
-    Wrapper for inverse kinematics using position only.
-    
-    Args:
-        pos: desired end-effector position [x, y, z]
-        x_dir: desired wrist orientation vector (default zero)
-        return_both: if True, returns both elbow-up and elbow-down solutions
-    
-    Returns:
-        q_up, q_down if return_both=True
-        else q_up only
-    """
-    q_down, q_up = inverseKinematics(x_dir, pos, return_both=True)
-    
-    if return_both:
-        return q_up, q_down   # always returns [Elbow Up, Elbow Down]
-    return q_up
+#def inverseKinematics_position(pos, x_dir=np.array([0,0,-1]), return_both=False):
+#    """
+#    Wrapper for inverse kinematics using position only.
+#    
+#    Args:
+#        pos: desired end-effector position [x, y, z]
+#        x_dir: desired wrist orientation vector (default zero)
+#        return_both: if True, returns both elbow-up and elbow-down solutions
+#    
+#    Returns:
+#        q_up, q_down if return_both=True
+#        else q_up only
+#    """
+#    q_down, q_up = inverseKinematics(x_dir, pos, return_both=True)
+#    
+#    if return_both:
+#        return q_up, q_down   # always returns [Elbow Up, Elbow Down]
+#    return q_up
 
 
     

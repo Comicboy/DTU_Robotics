@@ -27,8 +27,8 @@ MOTOR_LIMITS = {
         "tick_min": 204, "tick_zero": 512, "tick_max": 820},
     2: {"deg_min": 51,  "deg_zero": 60,  "deg_max": 205,  
         "tick_min": 175, "tick_zero": 204, "tick_max": 700},
-    3: {"deg_min": 43,  "deg_zero": 130, "deg_max": 240,  
-        "tick_min": 150, "tick_zero": 444, "tick_max": 820},
+    3: {"deg_min": 43,  "deg_zero": 150, "deg_max": 240,  
+        "tick_min": 150, "tick_zero": 512, "tick_max": 820},
     4: {"deg_min": 50, "deg_zero": 150, "deg_max": 240,
         "tick_min": 170, "tick_zero": 512, "tick_max": 820},
 }
@@ -67,7 +67,7 @@ def setup_motors(portHandler, packetHandler):
     """
     for ID in DXL_IDS:
         packetHandler.write1ByteTxRx(portHandler, ID, ADDR_MX_TORQUE_ENABLE, TORQUE_ENABLE)
-        packetHandler.write2ByteTxRx(portHandler, ID, ADDR_MX_MOVING_SPEED, 50)
+        packetHandler.write2ByteTxRx(portHandler, ID, ADDR_MX_MOVING_SPEED, 100)
 
 # ----------------------------- DEG → TICKS -----------------------------
 def deg2dxl(servo, deg_relative):
@@ -207,7 +207,7 @@ def go_home(portHandler, packetHandler, sleep_time=1.2):
     Move the robot to a predefined HOME position (degrees).
     Does not use IK. Computes FK using real motor angles and prints end-effector position.
     """
-    home_angles_deg = [0, 60, -30, 0]  # Example home position
+    home_angles_deg = [0, 60, -30, -100]  # Example home position
     print(f"\nMoving to HOME (deg): {home_angles_deg}")
 
     home_angles_rad = np.deg2rad(home_angles_deg)
@@ -226,25 +226,26 @@ def go_home(portHandler, packetHandler, sleep_time=1.2):
 # ----------------------------- MOVE TO POSITION -----------------------------
 def move_to_position(portHandler, packetHandler, pos):
     """
-    Move the robot end-effector to a specified Cartesian position [x, y, z] (mm)
-    using inverse kinematics. Always uses the elbow-up solution for simplicity.
+    Move robot down to a given Cartesian position, elbow-up only.
     """
-    q_up, q_down = kinematics.inverseKinematics_position(pos, return_both=True)
+    print(f"\n--- Moving down to {pos} ---")
 
-    q_rad = q_up
-    sol = "ELBOW UP"
+    q = kinematics.inverseKinematics(pos)
+    print("IK solution (rad):", np.round(q,3))
+    print("IK solution (deg):", np.round(np.rad2deg(q),1))
 
-    q_deg_int = np.round(np.rad2deg(q_rad)).astype(int)
-    print(f"{sol}: {q_deg_int}")
+    set_angles(portHandler, packetHandler, q)
+    sleep(4)
 
-    set_angles(portHandler, packetHandler, np.deg2rad(q_deg_int))
-    sleep(0.5)
-
-    # Debug: print real motor angles
     real_angles = get_current_angles(portHandler, packetHandler)
-    print(f"Current angles (from motors): {np.round(real_angles,2)}\n")
+    print("Real joint angles (deg):", real_angles)
 
-    return True
+    _, T04, _ = kinematics.forwards_kinematics(*np.deg2rad(real_angles))
+    print("Achieved EE position:", np.round(T04[:3,3],1))
+
+
+
+
 
 
 

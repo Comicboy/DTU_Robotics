@@ -38,10 +38,10 @@ def draw_circle_motion(portHandler, packetHandler, steps=5, z_fixed=50):
         pos = p_center + radius * np.array([np.cos(phi), np.sin(phi), 0])
         
         # Compute IK (returns elbow-up and elbow-down solutions)
-        q_up, q_down = kinematics.inverseKinematics_position(pos, return_both=True)
+        q = kinematics.inverseKinematics(pos)
         
         # Move using the elbow-down solution
-        control.set_angles(portHandler, packetHandler, q_down)
+        control.set_angles(portHandler, packetHandler, q)
         sleep(0.07)  # small delay to allow motion
 
     print("--- Circle finished ---\n")
@@ -59,7 +59,7 @@ def follow_vertical_trajectory(portHandler, packetHandler, x_fixed, y_fixed, z_v
     """
     print("\n--- Following vertical trajectory (stylus down) ---")
     
-    x_dir = np.array([0, 0, -1])  # fixed downward direction
+    x_dir = np.array([0, 0, 0])  # fixed downward direction
     
     for z in z_values:
         pos = np.array([x_fixed, y_fixed, z])
@@ -112,21 +112,31 @@ def move_down_to_position(portHandler, packetHandler, pos, elbow="down"):
 
 ##### MAIN SINGLE POSITION
 if __name__ == "__main__":
-    img_id = 0
-
+    
     print_angle_legend()
 
     # Connect to motors
     portHandler, packetHandler = control.connect()
     control.setup_motors(portHandler, packetHandler)
     control.go_home(portHandler, packetHandler)
-    sleep(2)
 
+    sleep(5)
+#
     # Move to a predefined joint configuration
-    theta = [20, 30, 10, 0]  # joint angles in degrees
-    control.move_to_angles(portHandler, packetHandler, theta)
-
-    
+    pos = [100,0,0]  # joint angles in degrees
+    control.move_to_position(portHandler, packetHandler, pos)
+    sleep(5)
+    pos = [100,50,100]  # joint angles in degrees
+    control.move_to_position(portHandler, packetHandler, pos)
+    sleep(5)
+    pos = [100,-50,0]  # joint angles in degrees
+    control.move_to_position(portHandler, packetHandler, pos)
+    sleep(5)
+    pos = [80,-50,-30]  # joint angles in degrees
+    control.move_to_position(portHandler, packetHandler, pos)
+    sleep(5)
+#
+   
     print("DONE")
 
 
@@ -138,7 +148,7 @@ if __name__ == "__main__":
 #     portHandler, packetHandler = control.connect()
 #     control.setup_motors(portHandler, packetHandler)
 #
-#     control.go_home(portHandler, packetHandler)
+#     #control.go_home(portHandler, packetHandler)
 #     sleep(1)
 #     
 #     # Draw circular trajectory
@@ -155,11 +165,11 @@ if __name__ == "__main__":
 #     control.setup_motors(portHandler, packetHandler)
 #
 #     control.go_home(portHandler, packetHandler)
-#     sleep(1)
+#     sleep(5)
 #
 #     x_fixed = 150
 #     y_fixed = 0
-#     z_values = np.linspace(100, 10, 10)  # move down from Z=100 to Z=10 in 10 steps
+#     z_values = np.linspace(150, 100, 10)  # move down from Z=100 to Z=10 in 10 steps
 #
 #     follow_vertical_trajectory(portHandler, packetHandler, x_fixed, y_fixed, z_values, elbow="down")
 

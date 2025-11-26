@@ -1,0 +1,4 @@
+stereo_images/*
+*.png
+*.pyc
+*.zip

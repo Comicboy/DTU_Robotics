@@ -72,6 +72,42 @@ def follow_vertical_trajectory(portHandler, packetHandler, x_fixed, y_fixed, z_v
     
     print("--- Trajectory finished ---\n")
 
+
+def move_down_to_position(portHandler, packetHandler, pos, elbow="down"):
+    """
+    Move the robot to a requested (x, y, z) Cartesian position,
+    keeping the end-effector pointing downward.
+
+    Parameters:
+    - pos: array/list [x, y, z] in mm
+    - elbow: "up" or "down" IK branch
+    """
+
+    print(f"\n--- Moving down to position {pos} ---")
+
+    x_dir = np.array([0, 0, -1])  # always pointing downward
+
+    # Compute IK (returns both solutions)
+    q_up, q_down = kinematics.inverseKinematics_position(
+        pos,
+        x_dir=x_dir,
+        return_both=True
+    )
+
+    # Choose the correct branch
+    q = q_down if elbow.lower() == "down" else q_up
+
+    # Move robot
+    control.set_angles(portHandler, packetHandler, q)
+    sleep(1.0)
+
+    # Read real robot angles
+    real_angles = control.get_current_angles(portHandler, packetHandler)
+    print(f"Real joint angles (deg): {real_angles}")
+
+    print("--- Reached target position ---\n")
+
+
 # ----------------------------- MAIN PROGRAMS -----------------------------
 
 ##### MAIN SINGLE POSITION
@@ -83,10 +119,13 @@ if __name__ == "__main__":
     # Connect to motors
     portHandler, packetHandler = control.connect()
     control.setup_motors(portHandler, packetHandler)
+    control.go_home(portHandler, packetHandler)
+    sleep(2)
 
     # Move to a predefined joint configuration
-    theta = [20, 10, 30, 0]  # joint angles in degrees
+    theta = [20, 30, 10, 0]  # joint angles in degrees
     control.move_to_angles(portHandler, packetHandler, theta)
+
     
     print("DONE")
 
@@ -94,7 +133,7 @@ if __name__ == "__main__":
 
 
 ##### MAIN CIRCLE 
-# if __name__ == "__main__":
+#if __name__ == "__main__":
 #     print("\n--- INIT ---\n")
 #     portHandler, packetHandler = control.connect()
 #     control.setup_motors(portHandler, packetHandler)
@@ -110,7 +149,7 @@ if __name__ == "__main__":
 
 
 ##### MAIN VERTICAL TRAJECTORY 
-# if __name__ == "__main__":
+#if __name__ == "__main__":
 #     print("\n--- INIT ---\n")
 #     portHandler, packetHandler = control.connect()
 #     control.setup_motors(portHandler, packetHandler)

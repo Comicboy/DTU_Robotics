@@ -45,9 +45,9 @@ def forwards_kinematics(theta_1, theta_2, theta_3, theta_4):
 
     # Tool offset transformation (end-effector relative to joint 3)
     T_35 = np.array([
-        [np.cos(theta_4), -np.sin(theta_4), 0, 35],
-        [np.sin(theta_4),  np.cos(theta_4), 0, 45],
-        [0,                0,               1, 0],
+        [np.cos(theta_4), -np.sin(theta_4), 0, 46],
+        [np.sin(theta_4),  np.cos(theta_4), 0, 42],
+        [0,                0,               1, 19],
         [0,                0,               0, 1]
     ], dtype=float)
 

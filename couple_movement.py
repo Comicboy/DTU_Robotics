@@ -41,38 +41,44 @@ def save_current_frame(filename):
         print("[ERROR] Nessun frame disponibile da salvare.")
 
 
-def replicate_back_and_forth(portHandler, packetHandler, theta_1, theta_2, repetitions=5):
+def replicate_back_and_forth(portHandler, packetHandler, theta_1, theta_2):
 
     print("\n--- Moving to POSITION 1 ---")
     T1 = control.move_to_angles(portHandler, packetHandler, theta_1)
     print("\nFirst Trasformation T1:\n", T1)
     sleep(2)
+
     save_current_frame("pos1_before.png")
 
     print("\n--- Moving to POSITION 2 ---")
     T2 = control.move_to_angles(portHandler, packetHandler, theta_2)
     print("\nFirst Trasformation T2:\n", T2)
     sleep(2)
+    asin_deg = np.degrees(np.arcsin(abs(T2[2,0])))
+    angle_pitch = 90 - asin_deg
+    print("\nAngle of pitch: ", angle_pitch)
+    height = T2[2,3]
+    print("\nHeight of camera: ",height)
     save_current_frame("pos2_before.png")
 
-    T_rel = get_relative_transform(T1, T2)
-    print("\nRelative Transform T_rel:\n", T_rel)
-
-    print("\n--- Starting BACK AND FORTH ---\n")
-
-    for i in range(repetitions):
-        print(f"[{i+1}] 1 → 2")
-        control.move_to_angles(portHandler, packetHandler, theta_2)
-        sleep(2)
-        save_current_frame(f"pos2_rep_{i+1}.png")
-
-        print(f"[{i+1}] 2 → 1")
-        control.move_to_angles(portHandler, packetHandler, theta_1)
-        sleep(2)
-        save_current_frame(f"pos1_rep_{i+1}.png")
-
-    print("\nCompleted.\n")
-    return T_rel
+#    T_rel = get_relative_transform(T1, T2)
+#    print("\nRelative Transform T_rel:\n", T_rel)
+#
+#    print("\n--- Starting BACK AND FORTH ---\n")
+#
+#    for i in range(repetitions):
+#        print(f"[{i+1}] 1 → 2")
+#        control.move_to_angles(portHandler, packetHandler, theta_2)
+#        sleep(2)
+#        save_current_frame(f"pos2_rep_{i+1}.png")
+#
+#        print(f"[{i+1}] 2 → 1")
+#        control.move_to_angles(portHandler, packetHandler, theta_1)
+#        sleep(2)
+#        save_current_frame(f"pos1_rep_{i+1}.png")
+#
+#    print("\nCompleted.\n")
+#    return T_rel
 
 
 if __name__ == "__main__":
@@ -91,11 +97,10 @@ if __name__ == "__main__":
 
     # Define robot poses
     theta_1 = [0, 103, -63, -100]
-    theta_2 = [0, 120, -79, -100]
+    theta_2 = [0, 120, -79, -112]
 
     # Perform robot motion
-    T_rel = replicate_back_and_forth(portHandler, packetHandler, theta_1, theta_2, repetitions=3)
+    replicate_back_and_forth(portHandler, packetHandler, theta_1, theta_2)
 
-    print("\nFINAL T_rel:\n", T_rel)
 
     cam_thread.join()

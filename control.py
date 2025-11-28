@@ -243,9 +243,10 @@ def move_to_position(portHandler, packetHandler, pos):
     real_angles = get_current_angles(portHandler, packetHandler)
     print("Real joint angles (deg):", real_angles)
 
-    _, T04, _ = kinematics.forwards_kinematics(*np.deg2rad(real_angles))
+    _, T04, T05 = kinematics.forwards_kinematics(*np.deg2rad(real_angles))
     print("Achieved EE position:", np.round(T04[:3,3],1))
 
+    return T05
 
 
 
@@ -271,7 +272,7 @@ def detect_circle_world(img, T05, Z_plane = 50):
     circles = cv2.HoughCircles(gray, cv2.HOUGH_GRADIENT, dp=1.2, minDist=40,
                                param1=100, param2=20, minRadius=5, maxRadius=200)
     if circles is None:
-        return None, img_undist
+        return None, None, None, img_undist
 
     circles = np.uint16(np.around(circles))
     u, v, r = circles[0][0]
@@ -298,7 +299,7 @@ def detect_circle_world(img, T05, Z_plane = 50):
     cv2.circle(img_undist, (u, v), 2, (0,0,255), 3)
    
 
-    return dx, dy , dz, img_undist
+    return dx, dy, dz, img_undist
 
 
 def detect_circle_world_tilt(img, T05, Z_plane=50):

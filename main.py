@@ -48,6 +48,13 @@ def draw_circle_motion(portHandler, packetHandler, steps=5, z_fixed=50):
     print("--- Circle finished ---\n")
 
 
+def calculate_circle_step(i):
+    p_c = np.array([120, 0, 65])  # Center of the circle
+    radius = 70  # Radius of the circle
+    rot = np.array([np.cos(2*np.pi/36*i),np.sin(2*np.pi/36*i),0])
+    return p_c + radius * rot
+
+
 def follow_vertical_trajectory(portHandler, packetHandler, x_fixed, y_fixed, z_values, elbow="up", delay=0.1):
     """
     Move the robot along a vertical trajectory while keeping the end-effector pointing downwards.
@@ -145,6 +152,8 @@ def webcam_loop(cap):
 #    sleep(5)
    
 if __name__ == "__main__":
+
+    cap = cv2.VideoCapture(1)
     # 1. Connetti motori
     portHandler, packetHandler = control.connect()
     control.setup_motors(portHandler, packetHandler)
@@ -172,11 +181,9 @@ if __name__ == "__main__":
     T03, T04, T05 = kinematics.forwards_kinematics(*real_angles_rad)
     print(f"T05 (end-effector) = \n{np.round(T05,3)}")
 #    ## 5. Scatta foto dalla webcam
-    cap = cv2.VideoCapture(1)
+    
     ret, frame = cap.read()
-    cap.release()
-    if not ret:
-        raise RuntimeError("Impossibile leggere la camera!")
+    
 #    # 7. Trova cerchio nel world frame
     #dx, dy , dz , img_out = control.detect_circle_world(frame, T05)
 #
@@ -208,8 +215,23 @@ if __name__ == "__main__":
     #control.move_to_position(portHandler,packetHandler,P_base) 
     # 
     # 
-       
-    X_plane, img_out = control.detect_circle_world_tilt(frame, T05)
+    
+    # 7. Trova cerchio nel world framel
+    X_plane = None
+    X_plane , img_out = control.detect_circle_world_tilt(frame, T05)
+    i=0
+    while X_plane is None:
+        print("Could not find circle, trying again...")
+        print("T_04:\n", T04)
+        T = calculate_circle_step(i)
+        
+        T05 = control.move_to_position(portHandler,packetHandler,T)
+
+        
+        ret, frame = cap.read()
+        
+        X_plane, img_out = control.detect_circle_world_tilt(frame, T05)
+        i+=4
      # 9. Mostra immagine
     cv2.imshow("Circle Detection", img_out)
     cv2.waitKey(0)
@@ -217,7 +239,7 @@ if __name__ == "__main__":
 #
     X_plane = [X_plane[0], X_plane[1], X_plane[2] + 10 ]
     
-    control.move_to_position(portHandler,packetHandler,X_plane)
+    T05_Final = control.move_to_position(portHandler,packetHandler,X_plane)
 
 
 ##### MAIN CIRCLE 

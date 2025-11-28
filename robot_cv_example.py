@@ -35,7 +35,7 @@ def robot_task():
     # 3. GET DATA FROM ROBOT
     # Replace this with your actual camera getter, e.g., cam.get_frame()
     # For now, we load the file on disk
-    image = cv2.imread("robot_pose_1.jpg")
+    image = cv2.imread("robot_pose_2.jpg")
     
     if image is None:
         print("Failed to get image from robot camera.")
@@ -43,8 +43,8 @@ def robot_task():
 
     # Inputs from Robot Controller
     # You can now pass dynamic values if the robot moves to different heights/angles
-    current_pitch = 18.0   # Degrees (Positive = Pitch Down)
-    current_height = 500.0 # Millimeters (Lens to Table)
+    current_pitch = 20.0   # Degrees (Positive = Pitch Down)
+    current_height = 82.0 # Millimeters (Lens to Table)
 
     # 4. CALL THE VISION PIPELINE
     print(f"Processing image with Pitch={current_pitch}° and Height={current_height}mm...")

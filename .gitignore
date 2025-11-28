@@ -4,4 +4,11 @@ stereo_images/*
 *.zip
 Calibration/*
 BATSA/*
+Foto_positions/*
+stereo_images/*
+*.zip
+Calibration/*
+BATSA/*
+*.png
 *.jpg
+calibration_images/*

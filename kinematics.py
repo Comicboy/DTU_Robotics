@@ -1,6 +1,5 @@
 import numpy as np
 
-
 def calculateMatrix(theta, d, a, alpha):
     """
     Compute a single Denavit-Hartenberg transformation matrix.

@@ -205,7 +205,7 @@ def move_to_angles(portHandler, packetHandler, theta_deg, sleep_time=1.0, poll=F
     return T05
 
 # ----------------------------- GO HOME -----------------------------
-def go_home(portHandler, packetHandler, home_angles_deg = [0, 60, -50, -100], sleep_time=3):
+def go_home(portHandler, packetHandler, home_angles_deg = [0, 60, -50, -110], sleep_time=3):
     """
     Move the robot to a predefined HOME position (degrees).
     Does not use IK. Computes FK using real motor angles and prints end-effector position.
@@ -249,7 +249,11 @@ def move_to_position(portHandler, packetHandler, pos):
     return T05
 
 
-
+def calculate_circle_step(i):
+    p_c = np.array([120, 0, 65])  # Center of the circle
+    radius = 70  # Radius of the circle
+    rot = np.array([np.cos(2*np.pi/36*i),np.sin(2*np.pi/36*i),0])
+    return p_c + radius * rot
 
 
 def detect_circle_world(img, T05, Z_plane = 50):

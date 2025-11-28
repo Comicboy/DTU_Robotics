@@ -4,29 +4,29 @@ import glob
 import os
 
 # ----------------------------
-# PARAMETRI DELLA SCACCHIERA
+# CHESSBOARD PARAMETERS
 # ----------------------------
-corner_cols = 6   # orizzontale
-corner_rows = 9   # verticale
-square_size = 25 # in mm
+corner_cols = 6   # horizontal corners
+corner_rows = 9   # vertical corners
+square_size = 25  # in mm
 
-# criteri per raffinamento
+# refinement criteria
 criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
 
-# punti 3D della scacchiera (piano z=0)
+# 3D points of the chessboard (plane z = 0)
 objp = np.zeros((corner_rows*corner_cols, 3), np.float32)
 objp[:, :2] = np.mgrid[0:corner_cols, 0:corner_rows].T.reshape(-1, 2)
-objp *= square_size  # scala reale
+objp *= square_size  # real-world scale
 
-objpoints = []  # punti 3D
-imgpoints = []  # punti 2D
+objpoints = []  # 3D points
+imgpoints = []  # 2D points
 
 # ----------------------------
-# CARICAMENTO IMMAGINI
+# IMAGE LOADING
 # ----------------------------
 images = glob.glob("BATSA/*.jpg") + glob.glob("BATSA/*.png")
 
-print(f"Trovate {len(images)} immagini.")
+print(f"Found {len(images)} images.")
 
 for fname in images:
     img = cv2.imread(fname)
@@ -40,38 +40,19 @@ for fname in images:
         objpoints.append(objp)
         imgpoints.append(corners2)
 
-        print(f"[OK] Corner trovati in {fname}")
+        print(f"[OK] Corners found in {fname}")
     else:
-        print(f"[SKIP] Nessun corner trovato in {fname}")
+        print(f"[SKIP] No corners found in {fname}")
 
 # ----------------------------
-# CALIBRAZIONE
+# CALIBRATION
 # ----------------------------
-print("\nCalibrazione in corso...")
+print("\nCalibration in progress...")
 ret, K, dist, rvecs, tvecs = cv2.calibrateCamera(
     objpoints, imgpoints, gray.shape[::-1], None, None
 )
 
-print("\n=== RISULTATI CALIBRAZIONE ===")
-print("Matrice intrinseca K:\n", K)
-print("\nCoefficienti di distorsione:\n", dist.ravel())
-print("\nErrore medio di reproiezione:", ret)
-
-# ----------------------------
-# SALVATAGGIO
-# ----------------------------
-np.savez("calibration_data.npz", K=K, dist=dist, rvecs=rvecs, tvecs=tvecs)
-
-print("\nDati salvati in 'calibration_data.npz'")
-
-# ----------------------------
-# ESEMPIO DI UNDISTORT
-# ----------------------------
-os.makedirs("Calibration/undistorted", exist_ok=True)
-
-for i, fname in enumerate(images[:3]):  # salva solo i primi 3 esempi
-    img = cv2.imread(fname)
-    und = cv2.undistort(img, K, dist)
-    out_path = f"Calibration/undistorted/und_{i}.png"
-    cv2.imwrite(out_path, und)
-    print(f"Immagine corretta salvata: {out_path}")
+print("\n=== CALIBRATION RESULTS ===")
+print("Intrinsic matrix K:\n", K)
+print("\nDistortion coefficients:\n", dist.ravel())
+print("\nAverage reprojection error:", ret)

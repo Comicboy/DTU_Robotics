@@ -15,7 +15,7 @@ if __name__ == "__main__":
 
     # Move to scanning pose (camera looking down)
     control.go_home(portHandler, packetHandler, [0, 124, -83, -105])
-    sleep(3)
+    sleep(1.5)
 
     # Read angles again and update T05
     real_angles = control.get_current_angles(portHandler, packetHandler)
@@ -65,7 +65,7 @@ if __name__ == "__main__":
     # --------------------------------------------
     # Move robot to the detected circle position
     # --------------------------------------------
-    X_plane = [X_plane[0], X_plane[1], X_plane[2]+10]
+    X_plane = [X_plane[0], X_plane[1], X_plane[2] + 15]
 
     T05_Final = control.move_to_position(portHandler, packetHandler, X_plane)
 

@@ -306,7 +306,7 @@ def detect_circle_world(img, T05, Z_plane = 50):
     return dx, dy, dz, img_undist
 
 
-def detect_circle_world_tilt(img, T05, Z_plane=50):
+def detect_circle_world_tilt(img, T05, Z_plane=55):
     import cv2
     import numpy as np
 

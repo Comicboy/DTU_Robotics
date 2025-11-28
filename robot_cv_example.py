@@ -2,6 +2,9 @@ import cv2
 import json
 import numpy as np
 import os
+import control
+from time import sleep
+import kinematics
 
 # Import your vision module
 # (Ensure cv_pipeline_planb.py is in the same directory)
@@ -85,4 +88,76 @@ def robot_task():
         print(f"Vision Pipeline Failed: {e}")
 
 if __name__ == "__main__":
-    robot_task()
+
+    cap = cv2.VideoCapture(1)
+
+    print("Initializing Robot Vision...")
+    K, D = load_calibration()
+    
+    if K is None:
+        print("ERROR")
+        
+    # Connect motors
+    portHandler, packetHandler = control.connect()
+    control.setup_motors(portHandler, packetHandler)
+
+    # Move to scanning pose (camera looking down)
+    control.go_home(portHandler, packetHandler, [0, 120, -79, -112])
+    sleep(3)
+    # Read angles again and update T05
+    real_angles = control.get_current_angles(portHandler, packetHandler)
+    real_angles_rad = np.deg2rad(real_angles)
+    print(f"Real angles (rad): {np.round(real_angles_rad,3)}")
+
+    T03, T04, T05 = kinematics.forwards_kinematics(*real_angles_rad)
+    print(f"T05 (end-effector) = \n{np.round(T05,3)}")
+
+    # -------------------------------
+    # Take a picture from the camera
+    # -------------------------------
+    ret, frame = cap.read()
+
+    current_pitch = 20.0   # Degrees (Positive = Pitch Down)
+    current_height = 82.0 # Millimeters (Lens to Table)
+    print(f"Processing image with Pitch={current_pitch}° and Height={current_height}mm...")
+    
+    try:
+        # This single line runs Warping, OCR, and 3D Projection
+        keys_data, debug_image = vision.process_keyboard_from_robot(
+            image = frame,
+            pitch_deg = current_pitch,
+            camera_height_mm = current_height,
+            K = K,
+            D = D,
+            output_json_path="robot_execution_coords.json"
+        )
+        
+        # 5. EXECUTE ROBOT LOGIC
+        print(f"\nVision processing complete. Found {len(keys_data)} keys.")
+        
+        target_key = "H"
+        target_location = next((k for k in keys_data if k['label'] == target_key), None)
+        
+        if target_location:
+            coords = target_location['coords_cam']
+            print(f"Moving robot to press '{target_key}' at:")
+            print(f"  X (Right):   {coords['x']:.2f} mm")
+            print(f"  Y (Forward): {coords['y']:.2f} mm")
+            print(f"  Z (Depth):   {coords['z']:.2f} mm")
+            
+        
+        else:
+            print(f"Key '{target_key}' not found in the scene.")
+        coords = [coords,1]
+        #### MOVE 
+
+        mov = T05*coords
+        print("\nMOVE: ", coords)
+        mov = [mov[0], mov[1], mov[2] + 30]
+        T05 = control.move_to_position(portHandler, packetHandler, mov)
+        # Optional: Show what the robot 'saw'
+        cv2.imshow("Robot Vision Debug", debug_image)
+        cv2.waitKey(0)
+
+    except Exception as e:
+        print(f"Vision Pipeline Failed: {e}")

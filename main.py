@@ -4,6 +4,7 @@ import kinematics
 import wait
 from time import sleep
 import control
+import threading
 
 
 # ----------------------------- UTILITY FUNCTIONS -----------------------------
@@ -107,39 +108,116 @@ def move_down_to_position(portHandler, packetHandler, pos, elbow="down"):
 
     print("--- Reached target position ---\n")
 
+def webcam_loop(cap):
+    """Thread per mostrare la webcam in continuo."""
+    global last_frame
+    last_frame = None
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            continue
+
+        last_frame = frame.copy()  # salviamo l'ultimo frame disponibile
+        
+        cv2.imshow("Webcam", frame)
+        
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
+
 
 # ----------------------------- MAIN PROGRAMS -----------------------------
 
 ##### MAIN SINGLE POSITION
+#if __name__ == "__main__":
+#    
+#
+#    print_angle_legend()
+#
+#    # Connect to motors
+#    portHandler, packetHandler = control.connect()
+#    control.setup_motors(portHandler, packetHandler)
+#    control.go_home(portHandler, packetHandler)
+#
+#    sleep(5)
+   
 if __name__ == "__main__":
-    
-    print_angle_legend()
-
-    # Connect to motors
+    # 1. Connetti motori
     portHandler, packetHandler = control.connect()
     control.setup_motors(portHandler, packetHandler)
-    control.go_home(portHandler, packetHandler)
+    control
 
-    sleep(5)
+    # 2. Vai in HOME
+    control.go_home(portHandler, packetHandler,[0,90,0,0])
+    sleep(3)
+    real_angles = control.get_current_angles(portHandler, packetHandler)
+    real_angles_rad = np.deg2rad(real_angles)
+    print(f"Real angles (rad): {np.round(real_angles_rad,3)}")
+
+    # 4. Forward kinematics
+    T03, T04, T05 = kinematics.forwards_kinematics(*real_angles_rad)
+    print(f"T04 (end-effector) = \n{np.round(T04,3)}")
+    print(f"T05 (end-effector) = \n{np.round(T05,3)}")
+    control.go_home(portHandler, packetHandler,[0, 124, -83, -95])
+    sleep(3)
+    # 3. Leggi angoli reali dei motori
+    real_angles = control.get_current_angles(portHandler, packetHandler)
+    real_angles_rad = np.deg2rad(real_angles)
+    print(f"Real angles (rad): {np.round(real_angles_rad,3)}")
 #
-    # Move to a predefined joint configuration
-    pos = [100,0,0]  # joint angles in degrees
-    control.move_to_position(portHandler, packetHandler, pos)
-    sleep(5)
-    pos = [100,50,100]  # joint angles in degrees
-    control.move_to_position(portHandler, packetHandler, pos)
-    sleep(5)
-    pos = [100,-50,0]  # joint angles in degrees
-    control.move_to_position(portHandler, packetHandler, pos)
-    sleep(5)
-    pos = [80,-50,-30]  # joint angles in degrees
-    control.move_to_position(portHandler, packetHandler, pos)
-    sleep(5)
+    # 4. Forward kinematics
+    T03, T04, T05 = kinematics.forwards_kinematics(*real_angles_rad)
+    print(f"T05 (end-effector) = \n{np.round(T05,3)}")
+#    ## 5. Scatta foto dalla webcam
+    cap = cv2.VideoCapture(1)
+    ret, frame = cap.read()
+    cap.release()
+    if not ret:
+        raise RuntimeError("Impossibile leggere la camera!")
+#    # 7. Trova cerchio nel world frame
+    #dx, dy , dz , img_out = control.detect_circle_world(frame, T05)
 #
-   
-    print("DONE")
-
-
+    #mov = [dx,dy,dz]
+    #R_align = np.array([[0,  0, 1],
+    #                    [0, -1, 0],
+    #                    [1,  0, 0]])
+    #
+    #pos_cam_frame = R_align @ mov
+#
+    #print("\nPos respect to camera: ", pos_cam_frame)
+#
+#
+    #P_cam_h = np.hstack((pos_cam_frame, 1.0))
+    #P_base_h = T05 @ P_cam_h
+    #P_base = P_base_h[:3]
+    #
+    #print("Punto nel frame base:", P_base)
+#
+    #P_base = [P_base[0] - 20, P_base[1], P_base[2] + 20]
+#
+#   # # 9. Mostra immagine
+    #cv2.imshow("Circle Detection", img_out)
+    #cv2.waitKey(0)
+    #cv2.destroyAllWindows()
+#
+    
+#
+    #control.move_to_position(portHandler,packetHandler,P_base) 
+    # 
+    # 
+       
+    X_plane, img_out = control.detect_circle_world_tilt(frame, T05)
+     # 9. Mostra immagine
+    cv2.imshow("Circle Detection", img_out)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+#
+    X_plane = [X_plane[0],X_plane[1], X_plane[2] - 90 ]
+    
+    control.move_to_position(portHandler,packetHandler,X_plane)
 
 
 ##### MAIN CIRCLE 

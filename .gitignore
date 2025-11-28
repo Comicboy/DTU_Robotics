@@ -2,3 +2,6 @@ stereo_images/*
 *.png
 *.pyc
 *.zip
+Calibration/*
+BATSA/*
+*.jpg

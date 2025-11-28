@@ -2,6 +2,9 @@ import dynamixel_sdk as dxl
 import numpy as np
 import kinematics
 from time import sleep
+import cv2
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 
 # ----------------------------- CONSTANTS -----------------------------
 # Control table addresses and communication parameters
@@ -23,18 +26,18 @@ DXL_IDS = [1, 2, 3, 4]
 # ----------------------------- MOTOR LIMITS -----------------------------
 # Defines each motor's zero position, min/max degrees, and corresponding tick values
 MOTOR_LIMITS = {
-    1: {"deg_min": 60,  "deg_zero": 150, "deg_max": 240,
+    1: {"deg_min": 59.77,  "deg_zero": 150, "deg_max": 240.23,
         "tick_min": 204, "tick_zero": 512, "tick_max": 820},
-    2: {"deg_min": 51,  "deg_zero": 60,  "deg_max": 205,  
-        "tick_min": 175, "tick_zero": 204, "tick_max": 700},
-    3: {"deg_min": 43,  "deg_zero": 150, "deg_max": 240,  
-        "tick_min": 150, "tick_zero": 512, "tick_max": 820},
-    4: {"deg_min": 50, "deg_zero": 150, "deg_max": 240,
-        "tick_min": 170, "tick_zero": 512, "tick_max": 820},
+    2: {"deg_min": 42.48,  "deg_zero": 59.77,  "deg_max": 205.08,  
+        "tick_min": 145, "tick_zero": 204, "tick_max": 700},
+    3: {"deg_min": 29.30,  "deg_zero": 150, "deg_max": 273.93,  
+        "tick_min": 100, "tick_zero": 512, "tick_max": 935},
+    4: {"deg_min": 41.02, "deg_zero": 150, "deg_max": 240.23,
+        "tick_min": 140, "tick_zero": 512, "tick_max": 820},
 }
 
 # ----------------------------- CONNECTION -----------------------------
-def connect(port="COM3"):
+def connect(port="COM7"):
     """
     Connect to the Dynamixel motors via serial port.
     Returns portHandler and packetHandler for communication.
@@ -202,12 +205,12 @@ def move_to_angles(portHandler, packetHandler, theta_deg, sleep_time=1.0, poll=F
     return T05
 
 # ----------------------------- GO HOME -----------------------------
-def go_home(portHandler, packetHandler, sleep_time=1.2):
+def go_home(portHandler, packetHandler, home_angles_deg = [0, 60, -50, -100], sleep_time=3):
     """
     Move the robot to a predefined HOME position (degrees).
     Does not use IK. Computes FK using real motor angles and prints end-effector position.
     """
-    home_angles_deg = [0, 60, -30, -100]  # Example home position
+    
     print(f"\nMoving to HOME (deg): {home_angles_deg}")
 
     home_angles_rad = np.deg2rad(home_angles_deg)
@@ -248,4 +251,136 @@ def move_to_position(portHandler, packetHandler, pos):
 
 
 
+def detect_circle_world(img, T05, Z_plane = 50):
+    # --- Camera intrinsics ---
+    K = np.array([[656.3658228, 0, 310.42670403],
+                  [0, 657.00426074, 243.34985795],
+                  [0, 0, 1]])
+    dist = np.array([0.14093633, -0.30100884, -0.00250804,  0.00459299, -0.30962826])
+
+    cx = K[0, 2]
+    cy = K[1, 2]
+    fx = K[0, 0]
+    fy = K[1, 1]
+
+    # --- Undistort ---
+    img_undist = cv2.undistort(img, K, dist)
+    gray = cv2.cvtColor(img_undist, cv2.COLOR_BGR2GRAY)
+    gray = cv2.medianBlur(gray, 5)
+
+    circles = cv2.HoughCircles(gray, cv2.HOUGH_GRADIENT, dp=1.2, minDist=40,
+                               param1=100, param2=20, minRadius=5, maxRadius=200)
+    if circles is None:
+        return None, img_undist
+
+    circles = np.uint16(np.around(circles))
+    u, v, r = circles[0][0]
+
+    du = u - cx
+    dv = v - cy
+
+
+    # --- Pixel to normalized coordinates ---
+    x_n = du / fx 
+    y_n = dv / fy
+
+    
+    dx = x_n * (T05[2,3] + Z_plane)
+    dy = y_n * (T05[2,3] + Z_plane)
+    dz = T05[2,3] + Z_plane
+
+    print ("\ndx: ",dx)
+    print ("\ndy: ",dy)
+    print ("\ndz: ",dz)
+
+    # --- Draw circle on image ---
+    cv2.circle(img_undist, (u, v), r, (0,255,0), 2)
+    cv2.circle(img_undist, (u, v), 2, (0,0,255), 3)
+   
+
+    return dx, dy , dz, img_undist
+
+
+def detect_circle_world_tilt(img, T05, Z_plane=50):
+    import cv2
+    import numpy as np
+
+    # --- Camera intrinsics ---
+    K = np.array([[656.3658228, 0, 310.42670403],
+                  [0, 657.00426074, 243.34985795],
+                  [0, 0, 1]])
+    dist = np.array([0.14093633, -0.30100884, -0.00250804, 0.00459299, -0.30962826])
+
+    cx = K[0, 2]
+    cy = K[1, 2]
+    fx = K[0, 0]
+    fy = K[1, 1]
+
+    # --- Undistort ---
+    img_undist = cv2.undistort(img, K, dist)
+    gray = cv2.cvtColor(img_undist, cv2.COLOR_BGR2GRAY)
+    gray = cv2.medianBlur(gray, 5)
+
+    # --- Detect circle ---
+    circles = cv2.HoughCircles(gray, cv2.HOUGH_GRADIENT, dp=1.2, minDist=40,
+                               param1=100, param2=20, minRadius=5, maxRadius=200)
+    if circles is None:
+        return None, None, None, img_undist
+
+    circles = np.uint16(np.around(circles))
+    u, v, r = circles[0][0]
+
+    du = float(u - cx)
+    dv = float(v - cy)
+
+    # --- Pixel to normalized coordinates ---
+    x_n = du / fx
+    y_n = dv / fy
+
+    # --- Frame optical -> frame 5 (montaggio) ---
+    # OpenCV optical frame: x→destra, y→basso, z→avanti
+    # Frame 5: x→avanti, y→alto, z→destra
+    R_optical_to_5 = np.array([[0, 0, 1],
+                               [0, -1, 0],
+                               [1, 0, 0]])
+
+    # --- Raggio in frame base ---
+    R_cam_in_base = T05[:3, :3] @ R_optical_to_5
+    p_cam_base = T05[:3, 3].astype(float)
+
+    ray_optical = np.array([x_n, y_n, 1.0])
+    ray_base = R_cam_in_base @ ray_optical
+    ray_base /= np.linalg.norm(ray_base)
+
+    # --- Intersezione con il piano del tavolo ---
+    n_plane = np.array([0.0, 0.0, 1.0])
+    d_plane = -Z_plane  # tavolo sotto la base
+
+    denom = n_plane.dot(ray_base)
+    min_denom = 1e-3
+    if abs(denom) < min_denom:
+        print("Warning: asse ottico quasi parallelo al piano, calcolo approssimato")
+        denom = np.sign(denom) * min_denom
+
+    t = - (n_plane.dot(p_cam_base) + d_plane) / denom
+
+    # --- Punto sul piano in frame base ---
+    X_plane = p_cam_base + t * ray_base
+
+    # --- dx, dy, dz nel frame della camera montata (x avanti, y alto, z destra) ---
+    # dx/dy rispetto al centro ottico in mm
+    dx = x_n * t
+    dy = y_n * t
+    dz = t
+
+    print("\ndx:", dx)
+    print("dy:", dy)
+    print("dz:", dz)
+    print("X_plane (frame base):", X_plane)
+
+    # --- Draw circle on image ---
+    cv2.circle(img_undist, (u, v), r, (0, 255, 0), 2)
+    cv2.circle(img_undist, (u, v), 2, (0, 0, 255), 3)
+
+    return X_plane, img_undist
 

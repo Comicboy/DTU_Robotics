@@ -9,26 +9,25 @@ import shlex
 from PIL import Image
 
 # =========================================================
-# PART 1: KEY DETECTION LOGIC
-# (Unchanged, accepts raw numpy array)
+# PART 1: KEY DETECTION LOGIC (DANISH LAYOUT)
 # =========================================================
 
 # --- CONFIGURATION ---
-VALID_KEY_CHARS = list("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789`~!@#$%^&*()-_=+[]{}\\|;:'\",.<>/?")
+VALID_KEY_CHARS = list("ABCDEFGHIJKLMNOPQRSTUVWXYZÆØÅabcdefghijklmnopqrstuvwxyzæøå0123456789`~!@#$%^&*()-_=+[]{}\\|;:'\",.<>/?½§")
 VALID_KEYS = set(VALID_KEY_CHARS)
 DIGITS = set("0123456789")
-LETTERS = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+LETTERS = set("ABCDEFGHIJKLMNOPQRSTUVWXYZÆØÅ")
 
 QWERTY_FULL = [
-    ['`', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '='],
-    ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'],
-    ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'],
-    ['Z', 'X', 'C', 'V', 'B', 'N', 'M']
+    ['½', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '+', '´'],
+    ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', 'Å'],
+    ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', 'Æ', 'Ø', "'"],
+    ['<', 'Z', 'X', 'C', 'V', 'B', 'N', 'M', ',', '.', '-']
 ]
 
 QWERTY_LETTERS = [
-    ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'],
-    ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'],
+    ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', 'Å'],
+    ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', 'Æ', 'Ø'],
     ['Z', 'X', 'C', 'V', 'B', 'N', 'M']
 ]
 
@@ -88,7 +87,10 @@ def _run_tesseract(pil_img, whitelist):
     whitelist_token = shlex.quote(whitelist)
     for psm in (10, 8, 6, 7, 13):
         config = f'--oem 1 --psm {psm} -c tessedit_char_whitelist={whitelist_token}'
-        text = pytesseract.image_to_string(pil_img, config=config).strip().replace("\n", "")
+        try:
+            text = pytesseract.image_to_string(pil_img, lang='dan', config=config).strip().replace("\n", "")
+        except:
+            text = pytesseract.image_to_string(pil_img, config=config).strip().replace("\n", "")
         if text:
             return text
     return ""
@@ -223,7 +225,7 @@ def map_rows_to_layout(results, qwerty_layout):
         used_layout.add(lr_best)
     return row_map
 
-# --- QWERTY CORRECTION & FILLING ---
+# --- QWERTY CORRECTION ---
 def correct_labels_by_qwerty(results, qwerty_layout, min_row_len=5, match_thresh=0.6):
     idxs = [i for i, r in enumerate(results) if r.get("bbox")]
     if not idxs: return results
@@ -503,7 +505,7 @@ def select_layout_and_params(raw_results):
     min_row_len = 3 if letters_only else 5
     return layout, letters_only, min_row_len
 
-# --- MAIN DETECTION FUNCTION (Input is Numpy Array) ---
+# --- MAIN DETECTION FUNCTION ---
 def detect_keyboard_keys(img, verbose=False, save_debug=True, include_unlabeled=True):
     gray, mask_adaptive, mask_edges, mask_union = build_masks(img, block_size=21, C=5)
     contours = find_key_contours(mask_union, img.shape)
@@ -576,34 +578,66 @@ def detect_keyboard_keys(img, verbose=False, save_debug=True, include_unlabeled=
 # PART 2: DEPTH ESTIMATION & CAMERA LOGIC
 # =========================================================
 
+# --- HELPER: LOAD CALIBRATION ---
+def load_calibration_data(json_path="camera_calibration.json"):
+    if not os.path.exists(json_path):
+        raise FileNotFoundError(f"Calibration file not found at: {json_path}")
+    
+    with open(json_path, 'r') as f:
+        data = json.load(f)
+    
+    K = np.array(data["K"])
+    D = np.array(data["D"])
+    resolution = (data["image_width"], data["image_height"])
+    print(f"Loaded calibration (RMS Error: {data['rms_error']:.4f})")
+    return K, D, resolution
+
+
 # =========================================================
 # PART 2A: STEREO CAMERA CONFIGURATION
-# (Adjust your calibration and motion parameters here)
 # =========================================================
 
-# 1. INTRINSICS (Single Camera)
-K_CALIB = np.array([
-    [1200.0,    0.0, 640.0],
-    [   0.0, 1200.0, 360.0],
-    [   0.0,    0.0,   1.0]
+K_CALIB = np.eye(3) 
+D_CALIB = np.zeros(5)
+
+# 1. YOUR RAW ROBOT MATRIX (From Controller)
+# Pose 2 relative to Pose 1.
+# This matrix has the 2 degree rotation but NO 90-degree error.
+H_ROBOT_RAW = np.array([
+    [ 0.9994, -0.0349,  0.0,    -7.7105],
+    [ 0.0349,  0.9994,  0.0,   -28.0325],
+    [ 0.0,     0.0,     1.0,     0.0   ],
+    [ 0.0,     0.0,     0.0,     1.0   ]
 ])
 
-# 2. DISTORTION COEFFICIENTS
-D_CALIB = np.array([0.0, 0.0, 0.0, 0.0, 0.0])
+# 2. UNIT CONVERSION (mm -> meters)
+H_ROBOT_METERS = H_ROBOT_RAW.copy()
+H_ROBOT_METERS[:3, 3] = H_ROBOT_METERS[:3, 3] / 1000.0 
 
-# 3. ROBOT MOTION EXTRINSICS (Cam 1 -> Cam 2)
-ROTATION_ANGLE_DEG = 5.0
-_angle_rad = np.radians(ROTATION_ANGLE_DEG)
-
-R_EXT = np.array([
-    [ np.cos(_angle_rad), 0, np.sin(_angle_rad)],
-    [ 0,                  1, 0                 ],
-    [-np.sin(_angle_rad), 0, np.cos(_angle_rad)]
+# 3. CHANGE OF BASIS (Robot Frame -> OpenCV Frame)
+# Robot X (Fwd)  -> OpenCV Z (Fwd)
+# Robot Y (Up)   -> OpenCV -Y (Down)
+# Robot Z (Left) -> OpenCV -X (Right)
+R_CORR = np.array([
+    [ 0,  0, -1],
+    [ 0, -1,  0],
+    [ 1,  0,  0]
 ])
+H_CORR = np.eye(4)
+H_CORR[:3, :3] = R_CORR
 
-T_EXT = np.array([-0.05, 0.0, 0.0])
+# Apply Transform: H_new = B * H_old * inv(B)
+H_OPENCV_MOTION = H_CORR @ H_ROBOT_METERS @ np.linalg.inv(H_CORR)
 
-# 4. RESOLUTION
+print(f"Corrected Matrix Diagonal (Should be ~1.0): {np.diagonal(H_OPENCV_MOTION[:3, :3])}")
+
+# 4. INVERT FOR OPENCV STEREO
+# OpenCV 'stereoRectify' needs the Coordinate Transform (Frame 1 -> 2).
+H_FINAL = np.linalg.inv(H_OPENCV_MOTION)
+
+R_EXT = H_FINAL[:3, :3]
+T_EXT = H_FINAL[:3, 3]
+
 CAM_RES = (1280, 720)
 
 
@@ -650,7 +684,7 @@ class RotatedStereoProcessor:
         return pts_rect[0, 0]
 
     def process_frame(self, imgL_raw, imgR_raw):
-        # A. RECTIFY IMAGES (Depth Only)
+        # A. RECTIFY IMAGES
         rect_L = cv2.remap(imgL_raw, self.mapL_x, self.mapL_y, cv2.INTER_LINEAR)
         rect_R = cv2.remap(imgR_raw, self.mapR_x, self.mapR_y, cv2.INTER_LINEAR)
         
@@ -659,9 +693,7 @@ class RotatedStereoProcessor:
         grayR = cv2.cvtColor(rect_R, cv2.COLOR_BGR2GRAY)
         disparity_map = self.stereo.compute(grayL, grayR).astype(np.float32) / 16.0
 
-        # === CREATE DEBUG VISUALIZATION (NORMALIZED) ===
-        # This creates a viewable 8-bit image of the disparity map
-        # We will draw circles on THIS to check our mapping accuracy
+        # Create Normalized Debug View
         disp_debug_vis = cv2.normalize(disparity_map, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
         disp_debug_vis = cv2.applyColorMap(disp_debug_vis, cv2.COLORMAP_JET)
         
@@ -674,18 +706,16 @@ class RotatedStereoProcessor:
         for key in key_results:
             cx_raw, cy_raw = key['center']['cx'], key['center']['cy']
             
-            # Map Raw coords -> Rectified coords
+            # Map Raw -> Rectified
             cx_rect, cy_rect = self.map_original_to_rectified(cx_raw, cy_raw)
             u_r, v_r = int(cx_rect), int(cy_rect)
             
-            # === DEBUG STEP: DRAW CIRCLE ON DISPARITY MAP ===
-            # If this circle is NOT over the key in the colored map, 
-            # your calibration (R, T, K) is wrong.
+            # Draw debug marker on disparity map
             cv2.circle(disp_debug_vis, (u_r, v_r), 5, (255, 255, 255), 2)
             
             if 0 <= u_r < self.width and 0 <= v_r < self.height:
                 # Sample depth in Rectified Frame
-                roi_size = 10 # Increased from 5 to 10 for better robustnes
+                roi_size = 10 
                 d_roi = disparity_map[max(0, v_r-roi_size):v_r+roi_size, 
                                       max(0, u_r-roi_size):u_r+roi_size]
                 valid_disp = d_roi[d_roi > 0]
@@ -693,12 +723,12 @@ class RotatedStereoProcessor:
                 if len(valid_disp) > 0:
                     d_val = np.median(valid_disp)
                     
-                    # Reproject to 3D (Rectified Frame)
+                    # Reproject to 3D
                     vec = np.array([u_r, v_r, d_val, 1.0])
                     point_4d = self.Q @ vec
                     point_rect = point_4d[:3] / point_4d[3]
                     
-                    # Inverse Transform back to Cam 1 Frame
+                    # Inverse Transform -> Cam 1 Frame
                     point_cam1 = self.R1.T @ point_rect
                     
                     final_keys_cam1.append({
@@ -722,11 +752,21 @@ class RotatedStereoProcessor:
 # =========================================================
 if __name__ == "__main__":
     
-    # Initialize using the Configuration defined in PART 2A
+    # 1. LOAD CALIBRATION
+    # Uses relative path, assuming json is in same folder
+    try:
+        calib_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "camera_calibration.json")
+        K_CALIB, D_CALIB, CAM_RES = load_calibration_data(calib_path)
+    except Exception as e:
+        print(f"Error loading calibration: {e}")
+        exit()
+
+    # 2. INITIALIZE PROCESSOR
     processor = RotatedStereoProcessor(K_CALIB, D_CALIB, R_EXT, T_EXT, CAM_RES)
 
-    imgL = cv2.imread("robot_pose_1.png")
-    imgR = cv2.imread("robot_pose_2.png")
+    # 3. LOAD TEST IMAGES
+    imgL = cv2.imread("robot_pose_1.jpg")
+    imgR = cv2.imread("robot_pose_2.jpg")
 
     if imgL is not None and imgR is not None:
         vis, disp, data, debug_vis = processor.process_frame(imgL, imgR)
@@ -737,4 +777,4 @@ if __name__ == "__main__":
         print(json.dumps(data, indent=2))
         cv2.waitKey(0)
     else:
-        print("Images not found. Please provide 'robot_pose_1.png' and 'robot_pose_2.png'")
+        print("Images not found. Please provide 'robot_pose_1.jpg' and 'robot_pose_2.jpg'")

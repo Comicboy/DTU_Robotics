@@ -8,15 +8,13 @@ import os
 # CONFIGURATION
 # =========================================================
 
-# 1. SQUARE SIZE
-# Value is in METERS (25mm = 0.025m)
-# This ensures your translation vectors (T) are in meters.
+# 1. SQUARE SIZE (Meters)
+# 25mm = 0.025m
 SQUARE_SIZE = 0.025 
 
-# 2. INNER CORNERS (Not number of squares!)
-# You have 9 squares horizontal -> 8 inner corners
-# You presumably have 7 squares vertical -> 6 inner corners
-# If detection fails, try swapping these to (6, 8)
+# 2. INNER CORNERS
+# 9 squares horizontal -> 8 inner corners
+# 7 squares vertical   -> 6 inner corners
 NB_HORIZONTAL = 8
 NB_VERTICAL = 6
 
@@ -24,8 +22,7 @@ NB_VERTICAL = 6
 # PREPARATION
 # =========================================================
 
-# Prepare object points, like (0,0,0), (1,0,0), (2,0,0) ...
-# We multiply by SQUARE_SIZE to convert "grid units" to "meters"
+# Prepare object points (0,0,0), (1,0,0), (2,0,0) ...
 objp = np.zeros((NB_HORIZONTAL * NB_VERTICAL, 3), np.float32)
 objp[:, :2] = np.mgrid[0:NB_VERTICAL, 0:NB_HORIZONTAL].T.reshape(-1, 2)
 objp = objp * SQUARE_SIZE
@@ -34,13 +31,16 @@ objp = objp * SQUARE_SIZE
 objpoints = [] # 3d point in real world space
 imgpoints = [] # 2d points in image plane.
 
-# Load images
-# Make sure your images are in a folder named 'imgs' relative to this script
-images = glob.glob('imgs/*.png')
+# --- ABSOLUTE PATH CONFIGURATION ---
+image_folder = r'c:/Users/peisz/OneDrive/Documents/dtu_workspace/DTU_Robotics/calibration_images'
+search_path = os.path.join(image_folder, '*.jpg')
+
+images = glob.glob(search_path)
 
 if not images:
-    print("ERROR: No images found in 'imgs/' folder.")
-    print("Please check the path or extension.")
+    print(f"ERROR: No images found at: {search_path}")
+    print(f"Checking folder: {image_folder}")
+    print("Please verify the path is correct and contains .jpg files.")
     exit()
 
 print(f"Found {len(images)} images. Starting processing...")
@@ -54,92 +54,100 @@ valid_images = 0
 for fname in images:
     img = cv2.imread(fname)
     if img is None:
+        print(f"Failed to load {os.path.basename(fname)}")
         continue
         
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
     # Find the chess board corners
-    # Using adaptive thresholding helps with uneven lighting
+    # Flags: Adaptive Threshold (lighting), Normalize (contrast), Fast Check (speed)
     flags = cv2.CALIB_CB_ADAPTIVE_THRESH + cv2.CALIB_CB_NORMALIZE_IMAGE + cv2.CALIB_CB_FAST_CHECK
     ret, corners = cv2.findChessboardCorners(gray, (NB_VERTICAL, NB_HORIZONTAL), flags)
 
-    # If found, add object points, image points (after refining them)
     if ret == True:
         objpoints.append(objp)
 
-        # Refine the corner detection for sub-pixel accuracy
+        # Refine for sub-pixel accuracy
         criteria = (cv2.TermCriteria_EPS + cv2.TermCriteria_MAX_ITER, 30, 0.001)
         corners_refined = cv2.cornerSubPix(gray, corners, (11, 11), (-1, -1), criteria)
         imgpoints.append(corners_refined)
 
-        # Draw and display the corners
-        # (We draw on a copy to keep the loop fast and clean)
+        # Visualization
         vis_img = img.copy()
         cv2.drawChessboardCorners(vis_img, (NB_VERTICAL, NB_HORIZONTAL), corners_refined, ret)
         
+        # Resize for display
+        display_h = 600
+        scale = display_h / vis_img.shape[0]
+        vis_img = cv2.resize(vis_img, (0,0), fx=scale, fy=scale) 
+        
         cv2.imshow('Calibration Detection', vis_img)
-        cv2.waitKey(100) # Wait 100ms per image to visualize
+        cv2.waitKey(50) # Fast playback
         valid_images += 1
+        print(f"[{valid_images}] Used: {os.path.basename(fname)}")
     else:
-        print(f"Corners not found in {fname} - Check lighting or grid size settings.")
+        print(f"  [X] Skipped: {os.path.basename(fname)} (Corners not found)")
 
 cv2.destroyAllWindows()
 
-if valid_images == 0:
-    print("Error: No valid corners detected in any image.")
-    exit()
+if valid_images < 10:
+    print(f"\nWARNING: Only {valid_images} valid images. Calibration might be poor.")
+    if valid_images == 0:
+        exit()
 
 # =========================================================
 # CALIBRATION
 # =========================================================
 
-print(f"\nCalibrating on {valid_images} valid images...")
+print(f"\nCalibrating camera with {valid_images} images...")
 
-# mtx: Camera Matrix (Intrinsic)
-# dist: Distortion Coefficients
-# rvecs, tvecs: Rotation and Translation vectors for each image
 ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(
     objpoints, imgpoints, gray.shape[::-1], None, None
 )
 
-print("\n" + "="*30)
-print(f"CALIBRATION SUCCESSFUL")
-print("="*30)
+print("\n" + "="*40)
+print(f"CALIBRATION RESULT")
+print("="*40)
 print(f"RMS Re-projection Error: {ret:.4f} pixels")
-print("-" * 30)
-print(f"Camera Matrix (K):\n{mtx}")
-print("-" * 30)
-print(f"Distortion Coeffs (D):\n{dist}")
-print("="*30)
+print("-" * 40)
+print("Camera Matrix (K):")
+print(mtx)
+print("-" * 40)
+print("Distortion Coefficients (D):")
+print(dist.ravel())
+print("="*40)
 
 # =========================================================
-# VISUAL VERIFICATION (Undistortion)
+# UNDISTORTION CHECK
 # =========================================================
 
-print("Displaying undistortion result on the first valid image...")
+print("Showing undistortion check on the first image...")
 img = cv2.imread(images[0])
 h, w = img.shape[:2]
-
-# Get optimal camera matrix (refines the view to remove black borders if needed)
 newcameramtx, roi = cv2.getOptimalNewCameraMatrix(mtx, dist, (w,h), 1, (w,h))
 
-# Undistort
 dst = cv2.undistort(img, mtx, dist, None, newcameramtx)
-
-# Crop the image based on the valid region of interest (ROI)
 x, y, w, h = roi
 dst = dst[y:y+h, x:x+w]
 
-cv2.imshow('Original', img)
-cv2.imshow('Undistorted', dst)
+# Resize for display
+display_h = 600
+scale = display_h / img.shape[0]
+img_small = cv2.resize(img, (0,0), fx=scale, fy=scale)
+dst_small = cv2.resize(dst, (0,0), fx=scale, fy=scale)
+
+cv2.imshow('Original (Scaled)', img_small)
+cv2.imshow('Undistorted (Scaled)', dst_small)
 cv2.waitKey(0)
 cv2.destroyAllWindows()
 
 # =========================================================
-# SAVE TO JSON
+# SAVE
 # =========================================================
 
-output_file = "camera_calibration.json"
+# Save to the script directory
+output_file = os.path.join(r'c:/Users/peisz/OneDrive/Documents/dtu_workspace/DTU_Robotics', "camera_calibration.json")
+
 data = {
     "K": mtx.tolist(),
     "D": dist.tolist(),
@@ -151,4 +159,4 @@ data = {
 with open(output_file, "w") as f:
     json.dump(data, f, indent=4)
 
-print(f"\nCalibration data saved to '{output_file}'")
+print(f"\nSaved calibration to '{output_file}'")

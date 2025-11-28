@@ -311,12 +311,7 @@ def detect_circle_world_tilt(img, T05, Z_plane=50):
                   [0, 0, 1]])
     dist = np.array([0.14093633, -0.30100884, -0.00250804, 0.00459299, -0.30962826])
 
-    cx = K[0, 2]
-    cy = K[1, 2]
-    fx = K[0, 0]
-    fy = K[1, 1]
-
-    # --- Undistort ---
+    # --- Undistort image ---
     img_undist = cv2.undistort(img, K, dist)
     gray = cv2.cvtColor(img_undist, cv2.COLOR_BGR2GRAY)
     gray = cv2.medianBlur(gray, 5)
@@ -325,62 +320,59 @@ def detect_circle_world_tilt(img, T05, Z_plane=50):
     circles = cv2.HoughCircles(gray, cv2.HOUGH_GRADIENT, dp=1.2, minDist=40,
                                param1=100, param2=20, minRadius=5, maxRadius=200)
     if circles is None:
-        return None, None, None, img_undist
+        return None, img_undist
 
     circles = np.uint16(np.around(circles))
     u, v, r = circles[0][0]
 
-    du = float(u - cx)
-    dv = float(v - cy)
-
-    # --- Pixel to normalized coordinates ---
-    x_n = du / fx
-    y_n = dv / fy
-
-    # --- Frame optical -> frame 5 (montaggio) ---
+    # --- Trasformazione da frame ottico OpenCV a frame 5 montato ---
     # OpenCV optical frame: x→destra, y→basso, z→avanti
-    # Frame 5: x→avanti, y→alto, z→destra
+    # Frame 5 montato: x→avanti, y→alto, z→destra
     R_optical_to_5 = np.array([[0, 0, 1],
                                [0, -1, 0],
                                [1, 0, 0]])
 
-    # --- Raggio in frame base ---
+    # --- Camera pose in base ---
     R_cam_in_base = T05[:3, :3] @ R_optical_to_5
     p_cam_base = T05[:3, 3].astype(float)
 
-    ray_optical = np.array([x_n, y_n, 1.0])
-    ray_base = R_cam_in_base @ ray_optical
+    # --- Ray dal pixel in frame camera usando le intrinseche ---
+    pixel_h = np.array([u, v, 1.0])
+    ray_cam = np.linalg.inv(K) @ pixel_h
+    ray_cam /= np.linalg.norm(ray_cam)
+
+    # --- Ray nel frame base ---
+    ray_base = R_cam_in_base @ ray_cam
     ray_base /= np.linalg.norm(ray_base)
 
     # --- Intersezione con il piano del tavolo ---
-    n_plane = np.array([0.0, 0.0, 1.0])
-    d_plane = -Z_plane  # tavolo sotto la base
-
-    denom = n_plane.dot(ray_base)
-    min_denom = 1e-3
-    if abs(denom) < min_denom:
-        print("Warning: asse ottico quasi parallelo al piano, calcolo approssimato")
-        denom = np.sign(denom) * min_denom
-
-    t = - (n_plane.dot(p_cam_base) + d_plane) / denom
+    # Z_plane = altezza del piano rispetto alla base (es. sotto la base → negativo)
+    z_table = -Z_plane
+    denom = ray_base[2]
+    if abs(denom) < 1e-6:
+        # raggio quasi parallelo al piano
+        print("Warning: raggio quasi parallelo al piano")
+        t = 0
+    else:
+        t = (z_table - p_cam_base[2]) / denom
 
     # --- Punto sul piano in frame base ---
     X_plane = p_cam_base + t * ray_base
 
     # --- dx, dy, dz nel frame della camera montata (x avanti, y alto, z destra) ---
-    # dx/dy rispetto al centro ottico in mm
-    dx = x_n * t
-    dy = y_n * t
-    dz = t
+    R_base_to_cam = np.linalg.inv(T05[:3, :3])
+    X_cam = R_base_to_cam @ (X_plane - p_cam_base)
+    dx, dy, dz = X_cam  # coordinate relative alla camera montata
 
-    print("\ndx:", dx)
-    print("dy:", dy)
-    print("dz:", dz)
-    print("X_plane (frame base):", X_plane)
-
-    # --- Draw circle on image ---
+    # --- Draw circle sul frame ---
     cv2.circle(img_undist, (u, v), r, (0, 255, 0), 2)
     cv2.circle(img_undist, (u, v), 2, (0, 0, 255), 3)
 
-    return X_plane, img_undist
+    # --- Debug prints ---
+    print("\nPixel (u,v):", u, v)
+    print("Ray base:", ray_base)
+    print("t (lunghezza raggio verso il piano):", t)
+    print("X_plane (frame base):", X_plane)
+    print("dx, dy, dz (camera montata):", dx, dy, dz)
 
+    return X_plane, img_undist

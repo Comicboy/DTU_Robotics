@@ -161,7 +161,7 @@ if __name__ == "__main__":
     T03, T04, T05 = kinematics.forwards_kinematics(*real_angles_rad)
     print(f"T04 (end-effector) = \n{np.round(T04,3)}")
     print(f"T05 (end-effector) = \n{np.round(T05,3)}")
-    control.go_home(portHandler, packetHandler,[0, 124, -83, -95])
+    control.go_home(portHandler, packetHandler,[0, 124, -83, -105])
     sleep(3)
     # 3. Leggi angoli reali dei motori
     real_angles = control.get_current_angles(portHandler, packetHandler)
@@ -215,7 +215,7 @@ if __name__ == "__main__":
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 #
-    X_plane = [X_plane[0],X_plane[1], X_plane[2] - 90 ]
+    X_plane = [X_plane[0], X_plane[1], X_plane[2] + 10 ]
     
     control.move_to_position(portHandler,packetHandler,X_plane)
 

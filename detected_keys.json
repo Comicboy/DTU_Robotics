@@ -1,0 +1,443 @@
+[
+  {
+    "label": "~",
+    "bbox": {
+      "x": 69,
+      "y": 137,
+      "w": 34,
+      "h": 54
+    },
+    "center": {
+      "cx": 86,
+      "cy": 164
+    },
+    "inferred": false,
+    "confidence": 37.04
+  },
+  {
+    "label": "1",
+    "bbox": {
+      "x": 69,
+      "y": 92,
+      "w": 54,
+      "h": 37
+    },
+    "center": {
+      "cx": 96,
+      "cy": 110
+    },
+    "inferred": true,
+    "confidence": 0.0
+  },
+  {
+    "label": "2",
+    "bbox": {
+      "x": 69,
+      "y": 199,
+      "w": 55,
+      "h": 54
+    },
+    "center": {
+      "cx": 96,
+      "cy": 226
+    },
+    "inferred": true,
+    "confidence": 0.0
+  },
+  {
+    "label": "3",
+    "bbox": {
+      "x": 69,
+      "y": 387,
+      "w": 55,
+      "h": 70
+    },
+    "center": {
+      "cx": 96,
+      "cy": 422
+    },
+    "inferred": true,
+    "confidence": 0.0
+  },
+  {
+    "label": "4",
+    "bbox": {
+      "x": 69,
+      "y": 262,
+      "w": 76,
+      "h": 54
+    },
+    "center": {
+      "cx": 107,
+      "cy": 289
+    },
+    "inferred": true,
+    "confidence": 0.0
+  },
+  {
+    "label": "5",
+    "bbox": {
+      "x": 69,
+      "y": 324,
+      "w": 108,
+      "h": 54
+    },
+    "center": {
+      "cx": 123,
+      "cy": 351
+    },
+    "inferred": true,
+    "confidence": 0.0
+  },
+  {
+    "label": "A",
+    "bbox": {
+      "x": 114,
+      "y": 137,
+      "w": 54,
+      "h": 54
+    },
+    "center": {
+      "cx": 141,
+      "cy": 164
+    },
+    "inferred": false,
+    "confidence": 40.06
+  },
+  {
+    "label": "7",
+    "bbox": {
+      "x": 132,
+      "y": 92,
+      "w": 54,
+      "h": 37
+    },
+    "center": {
+      "cx": 159,
+      "cy": 110
+    },
+    "inferred": true,
+    "confidence": 0.0
+  },
+  {
+    "label": "8",
+    "bbox": {
+      "x": 134,
+      "y": 199,
+      "w": 54,
+      "h": 54
+    },
+    "center": {
+      "cx": 161,
+      "cy": 226
+    },
+    "inferred": true,
+    "confidence": 0.0
+  },
+  {
+    "label": "9",
+    "bbox": {
+      "x": 134,
+      "y": 386,
+      "w": 54,
+      "h": 71
+    },
+    "center": {
+      "cx": 161,
+      "cy": 421
+    },
+    "inferred": true,
+    "confidence": 31.203999999999997
+  },
+  {
+    "label": "0",
+    "bbox": {
+      "x": 154,
+      "y": 262,
+      "w": 55,
+      "h": 54
+    },
+    "center": {
+      "cx": 181,
+      "cy": 289
+    },
+    "inferred": true,
+    "confidence": 0.0
+  },
+  {
+    "label": "-",
+    "bbox": {
+      "x": 178,
+      "y": 137,
+      "w": 55,
+      "h": 54
+    },
+    "center": {
+      "cx": 205,
+      "cy": 164
+    },
+    "inferred": true,
+    "confidence": 0.4
+  },
+  {
+    "label": "|",
+    "bbox": {
+      "x": 187,
+      "y": 324,
+      "w": 54,
+      "h": 54
+    },
+    "center": {
+      "cx": 214,
+      "cy": 351
+    },
+    "inferred": false,
+    "confidence": 35.227999999999994
+  },
+  {
+    "label": "Q",
+    "bbox": null,
+    "center": null,
+    "inferred": true,
+    "confidence": 0.0
+  },
+  {
+    "label": "W",
+    "bbox": null,
+    "center": null,
+    "inferred": true,
+    "confidence": 0.0
+  },
+  {
+    "label": "E",
+    "bbox": null,
+    "center": null,
+    "inferred": true,
+    "confidence": 0.0
+  },
+  {
+    "label": "R",
+    "bbox": null,
+    "center": null,
+    "inferred": true,
+    "confidence": 0.0
+  },
+  {
+    "label": "T",
+    "bbox": null,
+    "center": null,
+    "inferred": true,
+    "confidence": 0.0
+  },
+  {
+    "label": "Y",
+    "bbox": null,
+    "center": null,
+    "inferred": true,
+    "confidence": 0.0
+  },
+  {
+    "label": "U",
+    "bbox": {
+      "x": 20,
+      "y": 580,
+      "w": 205,
+      "h": 42
+    },
+    "center": {
+      "cx": 122,
+      "cy": 601
+    },
+    "inferred": true,
+    "confidence": 0.0
+  },
+  {
+    "label": "I",
+    "bbox": null,
+    "center": null,
+    "inferred": true,
+    "confidence": 0.0
+  },
+  {
+    "label": "O",
+    "bbox": null,
+    "center": null,
+    "inferred": true,
+    "confidence": 0.0
+  },
+  {
+    "label": "P",
+    "bbox": null,
+    "center": null,
+    "inferred": true,
+    "confidence": 0.0
+  },
+  {
+    "label": "[",
+    "bbox": null,
+    "center": null,
+    "inferred": true,
+    "confidence": 0.0
+  },
+  {
+    "label": "]",
+    "bbox": null,
+    "center": null,
+    "inferred": true,
+    "confidence": 0.0
+  },
+  {
+    "label": "\\",
+    "bbox": null,
+    "center": null,
+    "inferred": true,
+    "confidence": 0.0
+  },
+  {
+    "label": "A",
+    "bbox": null,
+    "center": null,
+    "inferred": true,
+    "confidence": 0.0
+  },
+  {
+    "label": "S",
+    "bbox": null,
+    "center": null,
+    "inferred": true,
+    "confidence": 0.0
+  },
+  {
+    "label": "D",
+    "bbox": null,
+    "center": null,
+    "inferred": true,
+    "confidence": 0.0
+  },
+  {
+    "label": "F",
+    "bbox": null,
+    "center": null,
+    "inferred": true,
+    "confidence": 0.0
+  },
+  {
+    "label": "G",
+    "bbox": null,
+    "center": null,
+    "inferred": true,
+    "confidence": 0.0
+  },
+  {
+    "label": "H",
+    "bbox": null,
+    "center": null,
+    "inferred": true,
+    "confidence": 0.0
+  },
+  {
+    "label": "J",
+    "bbox": null,
+    "center": null,
+    "inferred": true,
+    "confidence": 0.0
+  },
+  {
+    "label": "K",
+    "bbox": null,
+    "center": null,
+    "inferred": true,
+    "confidence": 0.0
+  },
+  {
+    "label": "L",
+    "bbox": null,
+    "center": null,
+    "inferred": true,
+    "confidence": 0.0
+  },
+  {
+    "label": ";",
+    "bbox": null,
+    "center": null,
+    "inferred": true,
+    "confidence": 0.0
+  },
+  {
+    "label": "'",
+    "bbox": null,
+    "center": null,
+    "inferred": true,
+    "confidence": 0.0
+  },
+  {
+    "label": "Z",
+    "bbox": null,
+    "center": null,
+    "inferred": true,
+    "confidence": 0.0
+  },
+  {
+    "label": "X",
+    "bbox": null,
+    "center": null,
+    "inferred": true,
+    "confidence": 0.0
+  },
+  {
+    "label": "C",
+    "bbox": null,
+    "center": null,
+    "inferred": true,
+    "confidence": 0.0
+  },
+  {
+    "label": "V",
+    "bbox": null,
+    "center": null,
+    "inferred": true,
+    "confidence": 0.0
+  },
+  {
+    "label": "B",
+    "bbox": null,
+    "center": null,
+    "inferred": true,
+    "confidence": 0.0
+  },
+  {
+    "label": "N",
+    "bbox": null,
+    "center": null,
+    "inferred": true,
+    "confidence": 0.0
+  },
+  {
+    "label": "M",
+    "bbox": null,
+    "center": null,
+    "inferred": true,
+    "confidence": 0.0
+  },
+  {
+    "label": ",",
+    "bbox": null,
+    "center": null,
+    "inferred": true,
+    "confidence": 0.0
+  },
+  {
+    "label": ".",
+    "bbox": null,
+    "center": null,
+    "inferred": true,
+    "confidence": 0.0
+  },
+  {
+    "label": "/",
+    "bbox": null,
+    "center": null,
+    "inferred": true,
+    "confidence": 0.0
+  }
+]

@@ -129,57 +129,6 @@ def get_current_angles(portHandler, packetHandler):
 
 
 
-def move_to_angles(portHandler, packetHandler, theta_deg, sleep_time=1.0, poll=False):
-    """
-    Move the robot to the specified joint angles (degrees), respecting motor limits.
-    Instrumented: prints sent and read ticks.
-    If poll=True, repeatedly reads the motors until they reach the target ticks.
-    """
-    print("\n[DEBUG] move_to_angles: requested (deg rel) =", theta_deg)
-    theta_rad = np.deg2rad(theta_deg)
-
-    set_angles(portHandler, packetHandler, theta_rad)
-
-    if poll:
-        desired_ticks = []
-        for i, deg_rel in enumerate(theta_deg):
-            servo = i + 1
-            desired_ticks.append(deg2dxl(servo, deg_rel))
-
-        import time
-        t0 = time.time()
-        timeout = max(2.0, abs(max(theta_deg) - min(theta_deg))/10.0 + 1.0)
-
-        while True:
-            ticks_read = []
-            for servo in DXL_IDS:
-                tick_read, _, _ = packetHandler.read2ByteTxRx(portHandler, servo, ADDR_MX_PRESENT_POSITION)
-                ticks_read.append(int(tick_read))
-
-            diffs = [abs(ticks_read[i] - desired_ticks[i]) for i in range(len(DXL_IDS))]
-            print(f"[POLL] ticks_read={ticks_read}, desired={desired_ticks}, diffs={diffs}")
-
-            if all(d <= 5 for d in diffs):
-                break
-            if time.time() - t0 > timeout:
-                print("[POLL] timeout waiting for motors to reach target")
-                break
-            time.sleep(0.08)
-    else:
-        sleep(sleep_time)
-
-    real_angles_deg = get_current_angles(portHandler, packetHandler)
-    real_angles_rad = np.deg2rad(real_angles_deg)
-
-    _, T04, T05 = kinematics.forwards_kinematics(*real_angles_rad)
-    ee_pos = T04[:3, 3]
-
-    print(f"[RESULT] Target angles (deg): {theta_deg}")
-    print(f"[RESULT] Real angles  (deg): {real_angles_deg}")
-    print(f"[RESULT] End-effector position (mm): {np.round(ee_pos, 3)}\n")
-
-    return T05
-
 # ----------------------------- GO HOME -----------------------------
 def go_home(portHandler, packetHandler, home_angles_deg = [0, 60, -50, -110], sleep_time=1.5):
     """

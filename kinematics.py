@@ -99,22 +99,22 @@ def inverseKinematics(o):
     c2 = (r_sq + s**2 - a2**2 - a3**2) / (2 * a2 * a3)
     c2 = np.clip(c2, -1, 1)  # numerical stability
 
-    s2_up = np.sqrt(1 - c2**2)
-    s2_down = -s2_up
+    s2_down = np.sqrt(1 - c2**2)
+    s2_up = -s2_down
 
     # Elbow-up and elbow-down q2
-    q2_up = np.arctan2(s2_up, c2)
     q2_down = np.arctan2(s2_down, c2)
+    q2_up = np.arctan2(s2_up, c2)
 
     # q1 for both elbow configurations
-    q1_up = np.arctan2(s, np.sqrt(r_sq)) - np.arctan2(a3 * s2_up, a2 + a3 * c2)
     q1_down = np.arctan2(s, np.sqrt(r_sq)) - np.arctan2(a3 * s2_down, a2 + a3 * c2)
+    q1_up = np.arctan2(s, np.sqrt(r_sq)) - np.arctan2(a3 * s2_up, a2 + a3 * c2)
 
     # q3 (wrist) for both configurations
-    q3_up = np.arctan2(x[2], np.sqrt(x[0]**2 + x[1]**2)) - q1_up - q2_up
     q3_down = np.arctan2(x[2], np.sqrt(x[0]**2 + x[1]**2)) - q1_down - q2_down
+    q3_up = np.arctan2(x[2], np.sqrt(x[0]**2 + x[1]**2)) - q1_up - q2_up
 
     # Only return elbow-down
-    q_down = np.array([q0, q1_down, q2_down, q3_down])
+    q_up = np.array([q0, q1_up, q2_up, q3_up])
 
-    return q_down
+    return q_up
